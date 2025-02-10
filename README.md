@@ -71,10 +71,14 @@ research_agent = create_react_agent(
 )
 
 # Create supervisor workflow
+prompt = """You are a team supervisor managing a research expert and a math expert.
+For current events, use research_agent
+For math problems, use math_agent"""
+
 workflow = create_supervisor(
     [research_agent, math_agent],
     model=model,
-    prompt="You are a team supervisor managing a research expert and a math expert.",
+    prompt=prompt,
 )
 
 # Compile and run
