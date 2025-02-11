@@ -1,11 +1,11 @@
 {
     "dockerfile_lines": [],
     "graphs": {
-      "report_masitro": "studio/graph.py:graph"
+      "report_masitro": "./graph.py:graph"
     },
     "python_version": "3.11",
-    "env": "./.env",
     "dependencies": [
-      "."
+      ".",
+      "graph"
     ]
   }

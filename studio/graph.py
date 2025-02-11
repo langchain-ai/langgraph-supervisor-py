@@ -48,7 +48,6 @@ from langgraph_supervisor import create_supervisor
 workflow = create_supervisor(
     [research_agent, math_agent], # Nodes
     model=model, # Model 
-    agents_respond_directly=True, # Router vs Orchestrator 
     output_mode="last_message", # What we pass back from agent to supervisor if using Orchestrator
     prompt="""You are a team supervisor managing a research expert and a math expert.
               For current events, use research_agent
