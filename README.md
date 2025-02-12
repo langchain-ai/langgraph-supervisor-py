@@ -20,6 +20,8 @@ pip install langgraph-supervisor
 
 Here's a simple example of a supervisor managing two specialized agents:
 
+![Supervisor Architecture](static/img/supervisor.png)
+
 ```bash
 pip install langgraph-supervisor langchain-openai
 
@@ -94,6 +96,8 @@ You can control how agent messages are added to the overall conversation history
 
 Include full message history from an agent:
 
+![Full History](static/img/full_history.png)
+
 ```python
 workflow = create_supervisor(
     agents=[agent1, agent2],
@@ -103,11 +107,34 @@ workflow = create_supervisor(
 
 Include only the final agent response:
 
+![Last Message](static/img/last_message.png)
+
 ```python
 workflow = create_supervisor(
     agents=[agent1, agent2],
     output_mode="last_message"
 )
+```
+
+## Multi-level Hierarchies
+
+You can create multi-level hierarchical systems by creating a supervisor that manages multiple supervisors.
+
+```python
+research_team = create_supervisor(
+    [research_agent, math_agent],
+    model=model,
+).compile(name="research_team")
+
+writing_team = create_supervisor(
+    [writing_agent, publishing_agent],
+    model=model,
+).compile(name="writing_team")
+
+top_level_supervisor = create_supervisor(
+    [research_team, writing_team],
+    model=model,
+).compile(name="top_level_supervisor")
 ```
 
 ## Adding Memory
@@ -136,25 +163,4 @@ app = workflow.compile(
     checkpointer=checkpointer,
     store=store
 )
-```
-
-## Multi-level Hierarchies
-
-You can create multi-level hierarchical systems by creating a supervisor that manages multiple supervisors.
-
-```python
-research_team = create_supervisor(
-    [research_agent, math_agent],
-    model=model,
-).compile(name="research_team")
-
-writing_team = create_supervisor(
-    [writing_agent, publishing_agent],
-    model=model,
-).compile(name="writing_team")
-
-top_level_supervisor = create_supervisor(
-    [research_team, writing_team],
-    model=model,
-).compile(name="top_level_supervisor")
 ```
