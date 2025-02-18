@@ -11,6 +11,7 @@ from langgraph.prebuilt.chat_agent_executor import (
     Prompt,
     create_react_agent,
 )
+from langgraph.utils.runnable import RunnableCallable
 
 from langgraph_supervisor.handoff import (
     create_handoff_tool,
@@ -26,7 +27,7 @@ OutputMode = Literal["full_history", "last_message"]
 """
 
 
-async def _make_call_agent(
+def _make_call_agent(
     agent: CompiledStateGraph,
     output_mode: OutputMode,
     add_handoff_back_messages: bool,
@@ -38,8 +39,7 @@ async def _make_call_agent(
             f"Needs to be one of {OutputMode.__args__}"
         )
 
-    async def call_agent(state: dict) -> dict:
-        output = await agent.ainvoke(state)
+    def _process_output(output: dict) -> dict:
         messages = output["messages"]
         if output_mode == "full_history":
             pass
@@ -56,10 +56,18 @@ async def _make_call_agent(
 
         return {"messages": messages}
 
-    return call_agent
+    def call_agent(state: dict) -> dict:
+        output = agent.invoke(state)
+        return _process_output(output)
+
+    async def acall_agent(state: dict) -> dict:
+        output = await agent.ainvoke(state)
+        return _process_output(output)
+
+    return RunnableCallable(call_agent, acall_agent)
 
 
-async def create_supervisor(
+def create_supervisor(
     agents: list[CompiledStateGraph],
     *,
     model: LanguageModelLike,
