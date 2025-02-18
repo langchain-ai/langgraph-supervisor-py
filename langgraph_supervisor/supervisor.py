@@ -54,7 +54,10 @@ def _make_call_agent(
         if add_handoff_back_messages:
             messages.extend(create_handoff_back_messages(agent.name, supervisor_name))
 
-        return output
+        return {
+            **output,
+            "messages": messages,
+        }
 
     def call_agent(state: dict) -> dict:
         output = agent.invoke(state)
