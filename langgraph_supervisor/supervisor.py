@@ -26,7 +26,7 @@ OutputMode = Literal["full_history", "last_message"]
 """
 
 
-def _make_call_agent(
+async def _make_call_agent(
     agent: CompiledStateGraph,
     output_mode: OutputMode,
     add_handoff_back_messages: bool,
@@ -38,8 +38,8 @@ def _make_call_agent(
             f"Needs to be one of {OutputMode.__args__}"
         )
 
-    def call_agent(state: dict) -> dict:
-        output = agent.invoke(state)
+    async def call_agent(state: dict) -> dict:
+        output = await agent.ainvoke(state)
         messages = output["messages"]
         if output_mode == "full_history":
             pass
@@ -59,7 +59,7 @@ def _make_call_agent(
     return call_agent
 
 
-def create_supervisor(
+async def create_supervisor(
     agents: list[CompiledStateGraph],
     *,
     model: LanguageModelLike,
