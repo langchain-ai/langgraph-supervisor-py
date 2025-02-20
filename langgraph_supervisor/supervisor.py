@@ -131,6 +131,7 @@ def create_supervisor(
         tools=all_tools,
         prompt=prompt,
         state_schema=state_schema,
+        version="v2",
     )
 
     builder = StateGraph(state_schema)
