@@ -12,6 +12,7 @@ from langgraph.prebuilt.chat_agent_executor import (
     create_react_agent,
 )
 from langgraph.utils.runnable import RunnableCallable
+from langgraph.pregel import Pregel
 
 from langgraph_supervisor.handoff import (
     create_handoff_tool,
@@ -28,11 +29,11 @@ OutputMode = Literal["full_history", "last_message"]
 
 
 def _make_call_agent(
-    agent: CompiledStateGraph,
+    agent: CompiledStateGraph | Pregel,
     output_mode: OutputMode,
     add_handoff_back_messages: bool,
     supervisor_name: str,
-) -> Callable[[dict], dict]:
+) -> Callable[[dict], dict] | RunnableCallable:
     if output_mode not in OutputMode.__args__:
         raise ValueError(
             f"Invalid agent output mode: {output_mode}. "
@@ -71,10 +72,10 @@ def _make_call_agent(
 
 
 def create_supervisor(
-    agents: list[CompiledStateGraph],
+    agents: list[CompiledStateGraph | Pregel],
     *,
     model: LanguageModelLike,
-    tools: list[Callable | BaseTool] | None = None,
+    tools: list[BaseTool | Callable] | None = None,
     prompt: Prompt | None = None,
     state_schema: StateSchemaType = AgentState,
     output_mode: OutputMode = "last_message",
@@ -83,8 +84,12 @@ def create_supervisor(
 ) -> StateGraph:
     """Create a multi-agent supervisor.
 
+    Supports agents created using both Graph API and Functional API explicitly.
+
     Args:
-        agents: List of agents to manage
+        agents: List of agents to manage. Can be created using either:
+               - Graph API: create_react_agent(...) -> CompiledStateGraph
+               - Functional API: @entrypoint() decorated functions -> Pregel
         model: Language model to use for the supervisor
         tools: Tools to use for the supervisor
         prompt: Optional prompt to use for the supervisor. Can be one of:
