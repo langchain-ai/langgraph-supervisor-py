@@ -31,6 +31,7 @@ lint lint_diff:
 	# [ "$(PYTHON_FILES)" = "" ] || uv run mypy $(PYTHON_FILES)
 
 format format_diff:
+	[ "$(PYTHON_FILES)" = "" ] || uv run ruff check --fix $(PYTHON_FILES)
 	[ "$(PYTHON_FILES)" = "" ] || uv run ruff format $(PYTHON_FILES)
 
 	
