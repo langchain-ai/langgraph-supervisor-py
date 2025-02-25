@@ -10,20 +10,17 @@ authors = [
     {name = "Vadym Barda", email = "19161700+vbarda@users.noreply.github.com "}
 ]
 readme = "README.md"
-requires-python = ">=3.11"
+requires-python = ">=3.10"
 dependencies = [
     "langgraph>=0.2.71",
     "langchain-core>=0.1.27",
 ]
 
-[project.optional-dependencies]
+[dependency-groups]
 test = [
     "pytest>=8.0.0",
     "pytest-asyncio>=0.25.0",
     "langchain-openai>=0.0.8",
-]
-
-dev = [
     "ruff>=0.9.4",
     "mypy>=1.8.0",
     "types-setuptools>=69.0.0",
