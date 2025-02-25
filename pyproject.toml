@@ -19,7 +19,6 @@ dependencies = [
 [dependency-groups]
 test = [
     "pytest>=8.0.0",
-    "pytest-asyncio>=0.25.0",
     "ruff>=0.9.4",
     "mypy>=1.8.0",
     "pytest-socket>=0.7.0",
@@ -34,8 +33,6 @@ testpaths = [
 ]
 python_files = ["test_*.py"]
 python_functions = ["test_*"]
-asyncio_mode = "strict"
-asyncio_default_fixture_loop_scope = "function"
 
 [tool.ruff]
 line-length = 100
