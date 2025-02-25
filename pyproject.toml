@@ -16,6 +16,8 @@ dependencies = [
 ]
 
 [dependency-groups]
-dev = [
+test = [
+    "pytest>=8.3.4",
+    "pytest-socket>=0.7.0",
     "ruff>=0.9.4",
 ]
