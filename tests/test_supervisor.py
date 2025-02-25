@@ -1,7 +1,5 @@
 """Tests for the supervisor module."""
 
-from typing import Self
-
 from langchain_core.language_models.fake_chat_models import GenericFakeChatModel
 from langchain_core.messages import AIMessage, HumanMessage
 from langchain_core.tools import tool
@@ -11,7 +9,7 @@ from langgraph_supervisor import create_supervisor
 
 
 class FakeModel(GenericFakeChatModel):
-    def bind_tools(self, *args, **kwargs) -> Self:
+    def bind_tools(self, *args, **kwargs) -> "FakeModel":
         """Do nothing for now."""
         return self
 
