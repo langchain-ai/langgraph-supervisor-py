@@ -169,7 +169,7 @@ app = workflow.compile(
 )
 ```
 
-## Quickstart Using Functional API 
+## Using Functional API 
 
 Here's a simple example of a supervisor managing two specialized agentic workflows created using Functional API:
 
@@ -184,7 +184,6 @@ from langgraph.prebuilt import create_react_agent
 from langgraph_supervisor import create_supervisor
 
 from langchain_openai import ChatOpenAI
-from langchain_core.messages import SystemMessage
 
 from langgraph.func import entrypoint, task
 from langgraph.graph import add_messages
@@ -197,7 +196,13 @@ model = ChatOpenAI(model="gpt-4o")
 @task
 def generate_joke(messages):
     """First LLM call to generate initial joke"""
-    msg = model.invoke([SystemMessage(content="Write a short joke")] + messages)
+    system_message = {
+        "role": "system", 
+        "content": "Write a short joke"
+    }
+    msg = model.invoke(
+        [system_message] + messages
+    )
     return msg
 
 @entrypoint()
@@ -240,9 +245,6 @@ workflow = create_supervisor(
 
 # Compile and run
 app = workflow.compile()
-
-# Compile and run
-app = workflow.compile()
 result = app.invoke({
     "messages": [
         {
@@ -253,5 +255,5 @@ result = app.invoke({
 })
 
 for m in result["messages"]:
-  m.pretty_print()
+    m.pretty_print()
 ```
