@@ -1,10 +1,9 @@
 import inspect
-from typing import Callable, Literal
+from typing import Any, Callable, Literal, Type
 
 from langchain_core.language_models import LanguageModelLike
 from langchain_core.tools import BaseTool
 from langgraph.graph import START, StateGraph
-from langgraph.graph.state import CompiledStateGraph
 from langgraph.prebuilt.chat_agent_executor import (
     AgentState,
     Prompt,
@@ -28,7 +27,7 @@ OutputMode = Literal["full_history", "last_message"]
 
 
 def _make_call_agent(
-    agent: CompiledStateGraph | Pregel,
+    agent: Pregel,
     output_mode: OutputMode,
     add_handoff_back_messages: bool,
     supervisor_name: str,
@@ -70,12 +69,13 @@ def _make_call_agent(
 
 
 def create_supervisor(
-    agents: list[CompiledStateGraph | Pregel],
+    agents: list[Pregel],
     *,
     model: LanguageModelLike,
     tools: list[BaseTool | Callable] | None = None,
     prompt: Prompt | None = None,
     state_schema: StateSchemaType = AgentState,
+    config_schema: Type[Any] | None = None,
     output_mode: OutputMode = "last_message",
     add_handoff_back_messages: bool = True,
     supervisor_name: str = "supervisor",
@@ -92,6 +92,8 @@ def create_supervisor(
             - Callable: This function should take in full graph state and the output is then passed to the language model.
             - Runnable: This runnable should take in full graph state and the output is then passed to the language model.
         state_schema: State schema to use for the supervisor graph.
+        config_schema: An optional schema for configuration.
+            Use this to expose configurable parameters via supervisor.config_specs.
         output_mode: Mode for adding managed agents' outputs to the message history in the multi-agent workflow.
             Can be one of:
             - `full_history`: add the entire agent message history
@@ -132,7 +134,7 @@ def create_supervisor(
         state_schema=state_schema,
     )
 
-    builder = StateGraph(state_schema)
+    builder = StateGraph(state_schema, config_schema=config_schema)
     builder.add_node(supervisor_agent, destinations=tuple(agent_names))
     builder.add_edge(START, supervisor_agent.name)
     for agent in agents:
