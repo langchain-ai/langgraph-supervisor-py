@@ -20,9 +20,9 @@ dependencies = [
 test = [
     "pytest>=8.0.0",
     "pytest-asyncio>=0.25.0",
-    "langchain-openai>=0.0.8",
     "ruff>=0.9.4",
     "mypy>=1.8.0",
+    "pytest-socket>=0.7.0",
     "types-setuptools>=69.0.0",
 ]
 
