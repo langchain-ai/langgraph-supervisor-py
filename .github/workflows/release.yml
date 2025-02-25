@@ -74,12 +74,6 @@ jobs:
           with open(os.environ["GITHUB_OUTPUT"], "a") as f:
               f.write(f"pkg-name={pkg_name}\n")
               f.write(f"version={version}\n")
-  fail_on_purpose:
-    # Uncomment once trusted publishing is enabled
-    runs-on: ubuntu-latest
-    steps:
-      - run: exit 1
-
   publish:
     needs:
       - build
