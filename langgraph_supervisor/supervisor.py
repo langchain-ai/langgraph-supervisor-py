@@ -84,12 +84,8 @@ def create_supervisor(
 ) -> StateGraph:
     """Create a multi-agent supervisor.
 
-    Supports agents created using both Graph API and Functional API explicitly.
-
     Args:
-        agents: List of agents to manage. Can be created using either:
-               - Graph API: create_react_agent(...) -> CompiledStateGraph
-               - Functional API: @entrypoint() decorated functions -> Pregel
+        agents: List of agents to manage
         model: Language model to use for the supervisor
         tools: Tools to use for the supervisor
         prompt: Optional prompt to use for the supervisor. Can be one of:
