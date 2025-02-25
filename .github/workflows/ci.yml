@@ -47,7 +47,7 @@ jobs:
         # Starting new jobs is also relatively slow,
         # so linting on fewer versions makes CI faster.
         python-version:
-          - "3.9"
+          - "3.10"
           - "3.12"
     uses:
       ./.github/workflows/_test.yml
