@@ -1,26 +1,26 @@
 """Tests for the supervisor module."""
-from typing import Any, Dict, List
-from langchain_openai import ChatOpenAI
-from langgraph_supervisor import create_supervisor
-from langgraph.prebuilt import create_react_agent
-from unittest.mock import MagicMock
+
+from typing import Self
+
+from langchain_core.language_models.fake_chat_models import GenericFakeChatModel
 from langchain_core.messages import AIMessage, HumanMessage
-from langchain_core.tools import BaseTool, tool
+from langchain_core.tools import tool
+from langgraph.prebuilt import create_react_agent
+
+from langgraph_supervisor import create_supervisor
 
 
-def create_mock_model() -> ChatOpenAI:
-    """Create a mock ChatOpenAI model for testing."""
-    model = MagicMock(spec=ChatOpenAI)
-    model.invoke.return_value = AIMessage(content="Mocked response")
-    model.bind_tools.return_value = model
-    model.config_specs = []
-    model.steps = []
-    return model
+class FakeModel(GenericFakeChatModel):
+    def bind_tools(self, *args, **kwargs) -> Self:
+        """Do nothing for now."""
+        return self
 
 
 def test_supervisor_basic_workflow() -> None:
     """Test basic supervisor workflow with a math agent."""
-    model = create_mock_model()
+    model = FakeModel(
+        messages=iter([AIMessage(content="Mocked response")]),
+    )
 
     @tool
     def add(a: float, b: float) -> float:
@@ -31,23 +31,17 @@ def test_supervisor_basic_workflow() -> None:
         model=model,
         tools=[add],
         name="math_expert",
-        prompt="You are a math expert. Always use one tool at a time."
+        prompt="You are a math expert. Always use one tool at a time.",
     )
 
     workflow = create_supervisor(
-        [math_agent],
-        model=model,
-        prompt="You are a supervisor managing a math expert."
+        [math_agent], model=model, prompt="You are a supervisor managing a math expert."
     )
 
     app = workflow.compile()
     assert app is not None
 
-    result = app.invoke({
-        "messages": [
-            HumanMessage(content="what's 2 + 2?")
-        ]
-    })
+    result = app.invoke({"messages": [HumanMessage(content="what's 2 + 2?")]})
 
     assert "messages" in result
     assert len(result["messages"]) > 0

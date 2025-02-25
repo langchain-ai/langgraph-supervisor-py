@@ -1,26 +1,26 @@
 """Tests for the supervisor module using functional API."""
-from typing import Any, Dict, List
-from langchain_openai import ChatOpenAI
-from langgraph_supervisor import create_supervisor
+
+from typing import Any, Dict, List, Self
+
+from langchain_core.language_models.fake_chat_models import GenericFakeChatModel
+from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage
 from langgraph.func import entrypoint, task
 from langgraph.graph import add_messages
-from unittest.mock import MagicMock
-from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, BaseMessage
+
+from langgraph_supervisor import create_supervisor
 
 
-def create_mock_model() -> ChatOpenAI:
-    """Create a mock ChatOpenAI model for testing."""
-    model = MagicMock(spec=ChatOpenAI)
-    model.invoke.return_value = AIMessage(content="Mocked joke response")
-    model.bind_tools.return_value = model
-    model.config_specs = []
-    model.steps = []
-    return model
+class FakeModel(GenericFakeChatModel):
+    def bind_tools(self, *args, **kwargs) -> Self:
+        """Do nothing for now."""
+        return self
 
 
 def test_supervisor_functional_workflow() -> None:
     """Test supervisor workflow with a functional API agent."""
-    model = create_mock_model()
+    model = FakeModel(
+        messages=iter([AIMessage(content="Mocked response")]),
+    )
 
     # Create a joke agent using functional API
     @task
@@ -31,7 +31,7 @@ def test_supervisor_functional_workflow() -> None:
     @entrypoint()
     def joke_agent(state: Dict[str, Any]) -> Dict[str, Any]:
         """Joke agent entrypoint."""
-        joke = generate_joke(state['messages']).result()
+        joke = generate_joke(state["messages"]).result()
         messages = add_messages(state["messages"], [joke])
         return {"messages": messages}
 
@@ -40,22 +40,16 @@ def test_supervisor_functional_workflow() -> None:
 
     # Create supervisor workflow
     workflow = create_supervisor(
-        [joke_agent],
-        model=model,
-        prompt="You are a supervisor managing a joke expert."
+        [joke_agent], model=model, prompt="You are a supervisor managing a joke expert."
     )
 
     # Compile and test
     app = workflow.compile()
     assert app is not None
 
-    result = app.invoke({
-        "messages": [
-            HumanMessage(content="Tell me a joke!")
-        ]
-    })
+    result = app.invoke({"messages": [HumanMessage(content="Tell me a joke!")]})
 
     # Verify results
     assert "messages" in result
     assert len(result["messages"]) > 0
-    assert any("joke" in msg.content.lower() for msg in result["messages"]) 
+    assert any("joke" in msg.content.lower() for msg in result["messages"])
