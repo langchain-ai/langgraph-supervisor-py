@@ -2,6 +2,7 @@ import inspect
 from typing import Any, Callable, Literal, Type
 
 from langchain_core.language_models import LanguageModelLike
+from langchain_core.messages import BaseMessage, AIMessage
 from langchain_core.tools import BaseTool
 from langgraph.graph import START, StateGraph
 from langgraph.prebuilt.chat_agent_executor import (
@@ -79,6 +80,8 @@ def create_supervisor(
     output_mode: OutputMode = "last_message",
     add_handoff_back_messages: bool = True,
     supervisor_name: str = "supervisor",
+    process_input_messages: Callable[[list[BaseMessage]], list[BaseMessage]] | None = None,
+    process_output_message: Callable[[AIMessage], AIMessage] | None = None,
 ) -> StateGraph:
     """Create a multi-agent supervisor.
 
@@ -125,6 +128,12 @@ def create_supervisor(
         and "parallel_tool_calls" in inspect.signature(model.bind_tools).parameters
     ):
         model = model.bind_tools(all_tools, parallel_tool_calls=False)
+
+    if process_input_messages:
+        model = process_input_messages | model
+
+    if process_output_message:
+        model = model | process_output_message
 
     supervisor_agent = create_react_agent(
         name=supervisor_name,
