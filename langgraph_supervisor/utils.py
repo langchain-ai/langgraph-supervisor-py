@@ -1,29 +1,29 @@
 import re
 
-from langchain_core.messages import BaseMessage, AIMessage
+from langchain_core.messages import AIMessage, BaseMessage
+
+NAME_PATTERN = re.compile(r"<name>(.*?)</name>", re.DOTALL)
+CONTENT_PATTERN = re.compile(r"<content>(.*?)</content>", re.DOTALL)
 
 
-name_pattern = re.compile(r"<name>(.*?)</name>", re.DOTALL)
-content_pattern = re.compile(r"<content>(.*?)</content>", re.DOTALL)
+def process_input_message(message: BaseMessage) -> BaseMessage:
+    """Process message content by adding explicit name and content tags.
 
+    This is useful for injecting additional information like the name of the agent into the message content.
+    """
+    if not isinstance(message, AIMessage):
+        return message
 
-def process_input_messages(messages: list[BaseMessage]) -> list[BaseMessage]:
-    formatted_messages: list[BaseMessage] = []
-    for message in messages:
-        if not isinstance(message, AIMessage):
-            formatted_messages.append(message)
-            continue
+    if not message.name:
+        return message
 
-        formatted_message = message.model_copy()
-        formatted_message.content = (
-            f"<name>{message.name}</name><content>{message.content}</content>"
-        )
-        formatted_messages.append(formatted_message)
-
-    return formatted_messages
+    formatted_message = message.model_copy()
+    formatted_message.content = f"<name>{message.name}</name><content>{message.content}</content>"
+    return formatted_message
 
 
 def process_output_message(message: AIMessage) -> AIMessage:
+    """Process message content in AI message by removing explicit name and content tags."""
     if not message.content:
         return message
 
@@ -41,8 +41,8 @@ def process_output_message(message: AIMessage) -> AIMessage:
     else:
         content = message.content
 
-    name_match: re.Match | None = name_pattern.search(content)
-    content_match: re.Match | None = content_pattern.search(content)
+    name_match: re.Match | None = NAME_PATTERN.search(content)
+    content_match: re.Match | None = CONTENT_PATTERN.search(content)
     if not name_match or not content_match:
         return message
 
