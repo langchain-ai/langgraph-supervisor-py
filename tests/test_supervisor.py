@@ -7,11 +7,11 @@ from langchain_core.callbacks.manager import CallbackManagerForLLMRun
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
 from langchain_core.outputs import ChatGeneration, ChatResult
-from langchain_core.tools import BaseTool
+from langchain_core.tools import BaseTool, tool
 from langgraph.prebuilt import create_react_agent
 
 from langgraph_supervisor import create_supervisor
-from langgraph_supervisor.message import MessageFormat
+from langgraph_supervisor.message import MessageFormat, with_message_format
 
 
 class FakeChatModel(BaseChatModel):
@@ -147,22 +147,25 @@ math_agent_messages = [
 
 
 @pytest.mark.parametrize(
-    "message_format",
+    "message_format,with_agent_message_format",
     [
-        None,
-        "xml_tags",
+        (None, False),
+        ("xml_tags", True),
     ],
 )
 def test_supervisor_basic_workflow(
     message_format: MessageFormat,
+    with_agent_message_format: bool,
 ) -> None:
     """Test basic supervisor workflow with two agents."""
 
     # output_mode = "last_message"
+    @tool
     def add(a: float, b: float) -> float:
         """Add two numbers."""
         return a + b
 
+    @tool
     def web_search(query: str) -> str:
         """Search the web for information."""
         return (
@@ -174,14 +177,24 @@ def test_supervisor_basic_workflow(
             "5. **Google (Alphabet)**: 181,269 employees."
         )
 
+    math_model = FakeChatModel(responses=math_agent_messages)
+    if with_agent_message_format:
+        math_model = with_message_format(math_model.bind_tools([add]), message_format)
+
     math_agent = create_react_agent(
-        model=FakeChatModel(responses=math_agent_messages),
+        model=math_model,
         tools=[add],
         name="math_expert",
     )
 
+    research_model = FakeChatModel(responses=research_agent_messages)
+    if with_agent_message_format:
+        research_model = with_message_format(
+            research_model.bind_tools([web_search]), message_format
+        )
+
     research_agent = create_react_agent(
-        model=FakeChatModel(responses=research_agent_messages),
+        model=research_model,
         tools=[web_search],
         name="research_expert",
     )
