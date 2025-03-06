@@ -3,7 +3,7 @@ from typing import Any, Callable, Literal, Type
 
 from langchain_core.language_models import LanguageModelLike
 from langchain_core.tools import BaseTool
-from langgraph.graph import START, StateGraph
+from langgraph.graph import START, END, StateGraph
 from langgraph.prebuilt.chat_agent_executor import (
     AgentState,
     Prompt,
@@ -135,7 +135,7 @@ def create_supervisor(
     )
 
     builder = StateGraph(state_schema, config_schema=config_schema)
-    builder.add_node(supervisor_agent, destinations=tuple(agent_names))
+    builder.add_node(supervisor_agent, destinations=tuple(agent_names) + (END,))
     builder.add_edge(START, supervisor_agent.name)
     for agent in agents:
         builder.add_node(
