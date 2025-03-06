@@ -2,7 +2,6 @@ import inspect
 from typing import Any, Callable, Literal, Type
 
 from langchain_core.language_models import LanguageModelLike
-from langchain_core.messages import AIMessage, BaseMessage
 from langchain_core.tools import BaseTool
 from langgraph.graph import END, START, StateGraph
 from langgraph.prebuilt.chat_agent_executor import (
@@ -18,6 +17,7 @@ from langgraph_supervisor.handoff import (
     create_handoff_back_messages,
     create_handoff_tool,
 )
+from langgraph_supervisor.message import MessageFormat, with_message_format
 
 OutputMode = Literal["full_history", "last_message"]
 """Mode for adding agent outputs to the message history in the multi-agent workflow
@@ -69,24 +69,6 @@ def _make_call_agent(
     return RunnableCallable(call_agent, acall_agent)
 
 
-def _attach_message_processors(
-    model: LanguageModelLike,
-    process_input_message: Callable[[BaseMessage], BaseMessage] | None = None,
-    process_output_message: Callable[[AIMessage], AIMessage] | None = None,
-) -> LanguageModelLike:
-    if process_input_message:
-
-        def process_input_messages(messages: list[BaseMessage]) -> list[BaseMessage]:
-            return [process_input_message(message) for message in messages]
-
-        model = process_input_messages | model
-
-    if process_output_message:
-        model = model | process_output_message
-
-    return model
-
-
 def create_supervisor(
     agents: list[Pregel],
     *,
@@ -98,8 +80,7 @@ def create_supervisor(
     output_mode: OutputMode = "last_message",
     add_handoff_back_messages: bool = True,
     supervisor_name: str = "supervisor",
-    process_input_message: Callable[[BaseMessage], BaseMessage] | None = None,
-    process_output_message: Callable[[AIMessage], AIMessage] | None = None,
+    message_format: MessageFormat | None = None,
 ) -> StateGraph:
     """Create a multi-agent supervisor.
 
@@ -122,9 +103,12 @@ def create_supervisor(
         add_handoff_back_messages: Whether to add a pair of (AIMessage, ToolMessage) to the message history
             when returning control to the supervisor to indicate that a handoff has occurred.
         supervisor_name: Name of the supervisor node.
-        process_input_message: An optional function that takes a message and reformats it before passing it to the LLM.
+        message_format: An optional message format to attach to the language model.
             This is useful for injecting additional information like the name of the agent into the message content.
-        process_output_message: An optional function that takes AI message from the LLM and reformats it back for the end user.
+
+            Can be one of:
+            - "xml_tags": Add name and content XML tags to the message content before passing to the LLM
+                and remove them after receiving the response.
     """
     agent_names = set()
     for agent in agents:
@@ -152,11 +136,8 @@ def create_supervisor(
     else:
         model = model.bind_tools(all_tools)
 
-    model = _attach_message_processors(
-        model,
-        process_input_message,
-        process_output_message,
-    )
+    if message_format:
+        model = with_message_format(model, message_format)
 
     supervisor_agent = create_react_agent(
         name=supervisor_name,
