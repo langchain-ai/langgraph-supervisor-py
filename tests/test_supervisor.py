@@ -1,7 +1,8 @@
 """Tests for the supervisor module."""
 
-from typing import Optional
+from typing import Callable, Optional
 
+import pytest
 from langchain_core.callbacks.manager import CallbackManagerForLLMRun
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
@@ -9,6 +10,7 @@ from langchain_core.outputs import ChatGeneration, ChatResult
 from langgraph.prebuilt import create_react_agent
 
 from langgraph_supervisor import create_supervisor
+from langgraph_supervisor.utils import process_input_message, process_output_message
 
 
 class FakeChatModel(BaseChatModel):
@@ -137,7 +139,19 @@ math_agent_messages = [
 ]
 
 
-def test_supervisor_basic_workflow() -> None:
+@pytest.mark.parametrize(
+    "input_processor,output_processor",
+    [
+        (None, None),
+        (process_input_message, None),
+        (None, process_output_message),
+        (process_input_message, process_output_message),
+    ],
+)
+def test_supervisor_basic_workflow(
+    input_processor: Optional[Callable[[BaseMessage], BaseMessage]],
+    output_processor: Optional[Callable[[AIMessage], AIMessage]],
+) -> None:
     """Test basic supervisor workflow with two agents."""
 
     # output_mode = "last_message"
@@ -169,7 +183,10 @@ def test_supervisor_basic_workflow() -> None:
     )
 
     workflow = create_supervisor(
-        [math_agent, research_agent], model=FakeChatModel(responses=supervisor_messages)
+        [math_agent, research_agent],
+        model=FakeChatModel(responses=supervisor_messages),
+        process_input_message=input_processor,
+        process_output_message=output_processor,
     )
 
     app = workflow.compile()
