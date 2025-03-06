@@ -11,7 +11,7 @@ from langchain_core.tools import BaseTool, tool
 from langgraph.prebuilt import create_react_agent
 
 from langgraph_supervisor import create_supervisor
-from langgraph_supervisor.message import MessageFormat, with_message_format
+from langgraph_supervisor.message import AgentNameFormat, with_agent_name
 
 
 class FakeChatModel(BaseChatModel):
@@ -147,15 +147,15 @@ math_agent_messages = [
 
 
 @pytest.mark.parametrize(
-    "message_format,with_agent_message_format",
+    "format_agent_name,format_individual_agent_name",
     [
         (None, False),
         ("xml_tags", True),
     ],
 )
 def test_supervisor_basic_workflow(
-    message_format: MessageFormat,
-    with_agent_message_format: bool,
+    format_agent_name: AgentNameFormat,
+    format_individual_agent_name: bool,
 ) -> None:
     """Test basic supervisor workflow with two agents."""
 
@@ -178,8 +178,8 @@ def test_supervisor_basic_workflow(
         )
 
     math_model = FakeChatModel(responses=math_agent_messages)
-    if with_agent_message_format:
-        math_model = with_message_format(math_model.bind_tools([add]), message_format)
+    if format_individual_agent_name:
+        math_model = with_agent_name(math_model.bind_tools([add]), format_agent_name)
 
     math_agent = create_react_agent(
         model=math_model,
@@ -188,10 +188,8 @@ def test_supervisor_basic_workflow(
     )
 
     research_model = FakeChatModel(responses=research_agent_messages)
-    if with_agent_message_format:
-        research_model = with_message_format(
-            research_model.bind_tools([web_search]), message_format
-        )
+    if format_individual_agent_name:
+        research_model = with_agent_name(research_model.bind_tools([web_search]), format_agent_name)
 
     research_agent = create_react_agent(
         model=research_model,
@@ -202,7 +200,7 @@ def test_supervisor_basic_workflow(
     workflow = create_supervisor(
         [math_agent, research_agent],
         model=FakeChatModel(responses=supervisor_messages),
-        message_format=message_format,
+        format_agent_name=format_agent_name,
     )
 
     app = workflow.compile()

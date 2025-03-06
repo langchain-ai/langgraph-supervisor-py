@@ -3,11 +3,12 @@ from typing import Literal
 
 from langchain_core.language_models import LanguageModelLike
 from langchain_core.messages import AIMessage, BaseMessage
+from langchain_core.runnables import RunnableLambda
 
 NAME_PATTERN = re.compile(r"<name>(.*?)</name>", re.DOTALL)
 CONTENT_PATTERN = re.compile(r"<content>(.*?)</content>", re.DOTALL)
 
-MessageFormat = Literal["xml_tags"]
+AgentNameFormat = Literal["xml_tags"]
 
 
 def _is_content_blocks_content(content: list[dict] | str) -> bool:
@@ -21,8 +22,6 @@ def _is_content_blocks_content(content: list[dict] | str) -> bool:
 
 def add_xml_tags_to_message_content(message: BaseMessage) -> BaseMessage:
     """Add name and content XML tags to the message content.
-
-    This is useful for injecting additional information like the name of the agent into the message content.
 
     Examples:
 
@@ -95,29 +94,39 @@ def remove_xml_tags_from_message_content(message: BaseMessage) -> BaseMessage:
     return parsed_message
 
 
-def with_message_format(
+def with_agent_name(
     model: LanguageModelLike,
-    message_format: MessageFormat,
+    agent_name_format: AgentNameFormat,
 ) -> LanguageModelLike:
-    """Attach message processors to a language model.
+    """Attach formatted agent names to the messages passed to and from a language model.
+
+    This is useful for making a message history with multiple agents more coherent.
+
+    NOTE: agent name is consumed from the message.name field.
+        If you're using an agent built with create_react_agent, name is automatically set.
+        If you're building a custom agent, make sure to set the name on the AI message returned by the LLM.
 
     Args:
-        model: Language model to attach message processors to.
-        message_processor: The type of message processor to attach.
+        model: Language model to add agent name formatting to.
+        agent_name_format: The formatting that will be applied to agent name when modifying message content.
             - "xml_tags": Add name and content XML tags to the message content before passing to the LLM
                 and remove them after receiving the response.
     """
-    if message_format == "xml_tags":
+    if agent_name_format == "xml_tags":
         process_input_message = add_xml_tags_to_message_content
         process_output_message = remove_xml_tags_from_message_content
 
     else:
         raise ValueError(
-            f"Invalid message format: {message_format}. Needs to be one of: {MessageFormat.__args__}"
+            f"Invalid agent name format: {agent_name_format}. Needs to be one of: {AgentNameFormat.__args__}"
         )
 
     def process_input_messages(messages: list[BaseMessage]) -> list[BaseMessage]:
         return [process_input_message(message) for message in messages]
 
-    model = process_input_messages | model | process_output_message
+    model = (
+        process_input_messages
+        | model
+        | RunnableLambda(process_output_message, name="process_output_message")
+    )
     return model

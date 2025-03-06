@@ -17,7 +17,7 @@ from langgraph_supervisor.handoff import (
     create_handoff_back_messages,
     create_handoff_tool,
 )
-from langgraph_supervisor.message import MessageFormat, with_message_format
+from langgraph_supervisor.message import AgentNameFormat, with_agent_name
 
 OutputMode = Literal["full_history", "last_message"]
 """Mode for adding agent outputs to the message history in the multi-agent workflow
@@ -80,7 +80,7 @@ def create_supervisor(
     output_mode: OutputMode = "last_message",
     add_handoff_back_messages: bool = True,
     supervisor_name: str = "supervisor",
-    message_format: MessageFormat | None = None,
+    format_agent_name: AgentNameFormat | False = False,
 ) -> StateGraph:
     """Create a multi-agent supervisor.
 
@@ -103,7 +103,7 @@ def create_supervisor(
         add_handoff_back_messages: Whether to add a pair of (AIMessage, ToolMessage) to the message history
             when returning control to the supervisor to indicate that a handoff has occurred.
         supervisor_name: Name of the supervisor node.
-        message_format: An optional message format to attach to the language model.
+        format_agent_name: Whether to optionally attach agent name to the messages passed to and from the language model.
             This is useful for injecting additional information like the name of the agent into the message content.
 
             Can be one of:
@@ -136,8 +136,8 @@ def create_supervisor(
     else:
         model = model.bind_tools(all_tools)
 
-    if message_format:
-        model = with_message_format(model, message_format)
+    if format_agent_name:
+        model = with_agent_name(model, format_agent_name)
 
     supervisor_agent = create_react_agent(
         name=supervisor_name,
