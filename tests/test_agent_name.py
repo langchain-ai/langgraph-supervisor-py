@@ -1,36 +1,36 @@
 from langchain_core.messages import AIMessage, HumanMessage
 
-from langgraph_supervisor.message import (
-    add_inline_agent_name_tags,
-    remove_inline_agent_name_tags,
+from langgraph_supervisor.agent_name import (
+    add_inline_agent_name,
+    remove_inline_agent_name,
 )
 
 
-def test_add_inline_agent_name_tags():
+def test_add_inline_agent_name():
     # Test that non-AI messages are returned unchanged.
     human_message = HumanMessage(content="Hello")
-    result = add_inline_agent_name_tags(human_message)
+    result = add_inline_agent_name(human_message)
     assert result == human_message
 
     # Test that AI messages with no name are returned unchanged.
     ai_message = AIMessage(content="Hello world")
-    result = add_inline_agent_name_tags(ai_message)
+    result = add_inline_agent_name(ai_message)
     assert result == ai_message
 
     # Test that AI messages get formatted with name and content tags.
     ai_message = AIMessage(content="Hello world", name="assistant")
-    result = add_inline_agent_name_tags(ai_message)
+    result = add_inline_agent_name(ai_message)
     assert result.content == "<name>assistant</name><content>Hello world</content>"
     assert result.name == "assistant"
 
 
-def test_add_inline_agent_name_tags_content_blocks():
+def test_add_inline_agent_name_content_blocks():
     content_blocks = [
         {"type": "text", "text": "Hello world"},
         {"type": "image", "image_url": "http://example.com/image.jpg"},
     ]
     ai_message = AIMessage(content=content_blocks, name="assistant")
-    result = add_inline_agent_name_tags(ai_message)
+    result = add_inline_agent_name(ai_message)
     assert result.content == [
         {"type": "image", "image_url": "http://example.com/image.jpg"},
         {"type": "text", "text": "<name>assistant</name><content>Hello world</content>"},
@@ -45,51 +45,51 @@ def test_add_inline_agent_name_tags_content_blocks():
         {"type": "text", "text": "<name>assistant</name><content></content>"}
     ]
     ai_message = AIMessage(content=content_blocks, name="assistant")
-    result = add_inline_agent_name_tags(ai_message)
+    result = add_inline_agent_name(ai_message)
 
     # The message should be returned unchanged
     assert result.content == expected_content_blocks
 
 
-def test_remove_inline_agent_name_tags():
+def test_remove_inline_agent_name():
     # Test that non-AI messages are returned unchanged.
     human_message = HumanMessage(content="Hello")
-    result = remove_inline_agent_name_tags(human_message)
+    result = remove_inline_agent_name(human_message)
     assert result == human_message
 
     # Test that messages with empty content are returned unchanged.
     ai_message = AIMessage(content="", name="assistant")
-    result = remove_inline_agent_name_tags(ai_message)
+    result = remove_inline_agent_name(ai_message)
     assert result == ai_message
 
     # Test that messages without name/content tags are returned unchanged.
     ai_message = AIMessage(content="Hello world", name="assistant")
-    result = remove_inline_agent_name_tags(ai_message)
+    result = remove_inline_agent_name(ai_message)
     assert result == ai_message
 
     # Test that messages with mismatched name are returned unchanged.
     ai_message = AIMessage(
         content="<name>different_name</name><content>Hello world</content>", name="assistant"
     )
-    result = remove_inline_agent_name_tags(ai_message)
+    result = remove_inline_agent_name(ai_message)
     assert result == ai_message
 
     # Test that content is correctly extracted from tags.
     ai_message = AIMessage(
         content="<name>assistant</name><content>Hello world</content>", name="assistant"
     )
-    result = remove_inline_agent_name_tags(ai_message)
+    result = remove_inline_agent_name(ai_message)
     assert result.content == "Hello world"
     assert result.name == "assistant"
 
 
-def test_remove_inline_agent_name_tags_content_blocks():
+def test_remove_inline_agent_name_content_blocks():
     content_blocks = [
         {"type": "text", "text": "<name>assistant</name><content>Hello world</content>"},
         {"type": "image", "image_url": "http://example.com/image.jpg"},
     ]
     ai_message = AIMessage(content=content_blocks, name="assistant")
-    result = remove_inline_agent_name_tags(ai_message)
+    result = remove_inline_agent_name(ai_message)
 
     expected_content = [
         {"type": "image", "image_url": "http://example.com/image.jpg"},
@@ -106,14 +106,14 @@ def test_remove_inline_agent_name_tags_content_blocks():
     ]
     expected_content_blocks = content_blocks[:-1]
     ai_message = AIMessage(content=content_blocks, name="assistant")
-    result = remove_inline_agent_name_tags(ai_message)
+    result = remove_inline_agent_name(ai_message)
     assert result.content == expected_content_blocks
 
 
-def test_remove_inline_agent_name_tags_multiline_content():
+def test_remove_inline_agent_name_multiline_content():
     multiline_content = """<name>assistant</name><content>This is
 a multiline
 message</content>"""
     ai_message = AIMessage(content=multiline_content, name="assistant")
-    result = remove_inline_agent_name_tags(ai_message)
+    result = remove_inline_agent_name(ai_message)
     assert result.content == "This is\na multiline\nmessage"

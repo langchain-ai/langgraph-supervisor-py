@@ -8,7 +8,7 @@ from langchain_core.runnables import RunnableLambda
 NAME_PATTERN = re.compile(r"<name>(.*?)</name>", re.DOTALL)
 CONTENT_PATTERN = re.compile(r"<content>(.*?)</content>", re.DOTALL)
 
-AgentNameFormat = Literal["inline"]
+AgentNameMode = Literal["inline"]
 
 
 def _is_content_blocks_content(content: list[dict] | str) -> bool:
@@ -20,7 +20,7 @@ def _is_content_blocks_content(content: list[dict] | str) -> bool:
     )
 
 
-def add_inline_agent_name_tags(message: BaseMessage) -> BaseMessage:
+def add_inline_agent_name(message: BaseMessage) -> BaseMessage:
     """Add name and content XML tags to the message content.
 
     Examples:
@@ -48,7 +48,7 @@ def add_inline_agent_name_tags(message: BaseMessage) -> BaseMessage:
     return formatted_message
 
 
-def remove_inline_agent_name_tags(message: BaseMessage) -> BaseMessage:
+def remove_inline_agent_name(message: BaseMessage) -> BaseMessage:
     """Removing explicit name and content XML tags from the AI message content.
 
     Examples:
@@ -96,7 +96,7 @@ def remove_inline_agent_name_tags(message: BaseMessage) -> BaseMessage:
 
 def with_agent_name(
     model: LanguageModelLike,
-    format_agent_name: AgentNameFormat,
+    agent_name_mode: AgentNameMode,
 ) -> LanguageModelLike:
     """Attach formatted agent names to the messages passed to and from a language model.
 
@@ -108,17 +108,16 @@ def with_agent_name(
 
     Args:
         model: Language model to add agent name formatting to.
-        format_agent_name: Use to specify how to expose the agent name to the LLM.
+        agent_name_mode: Use to specify how to expose the agent name to the LLM.
             - "inline": Add the agent name directly into the content field of the AI message using XML-style tags.
                 Example: "How can I help you" -> "<name>agent_name</name><content>How can I help you?</content>".
     """
-    if format_agent_name == "inline":
-        process_input_message = add_inline_agent_name_tags
-        process_output_message = remove_inline_agent_name_tags
-
+    if agent_name_mode == "inline":
+        process_input_message = add_inline_agent_name
+        process_output_message = remove_inline_agent_name
     else:
         raise ValueError(
-            f"Invalid agent name format: {format_agent_name}. Needs to be one of: {AgentNameFormat.__args__}"
+            f"Invalid agent name mode: {agent_name_mode}. Needs to be one of: {AgentNameMode.__args__}"
         )
 
     def process_input_messages(messages: list[BaseMessage]) -> list[BaseMessage]:

@@ -13,11 +13,11 @@ from langgraph.prebuilt.chat_agent_executor import (
 from langgraph.pregel import Pregel
 from langgraph.utils.runnable import RunnableCallable
 
+from langgraph_supervisor.agent_name import AgentNameMode, with_agent_name
 from langgraph_supervisor.handoff import (
     create_handoff_back_messages,
     create_handoff_tool,
 )
-from langgraph_supervisor.message import AgentNameFormat, with_agent_name
 
 OutputMode = Literal["full_history", "last_message"]
 """Mode for adding agent outputs to the message history in the multi-agent workflow
@@ -80,7 +80,7 @@ def create_supervisor(
     output_mode: OutputMode = "last_message",
     add_handoff_back_messages: bool = True,
     supervisor_name: str = "supervisor",
-    format_agent_name: AgentNameFormat | None = None,
+    include_agent_name: AgentNameMode | None = None,
 ) -> StateGraph:
     """Create a multi-agent supervisor.
 
@@ -103,7 +103,7 @@ def create_supervisor(
         add_handoff_back_messages: Whether to add a pair of (AIMessage, ToolMessage) to the message history
             when returning control to the supervisor to indicate that a handoff has occurred.
         supervisor_name: Name of the supervisor node.
-        format_agent_name: Use to specify how to expose the agent name to the underlying supervisor LLM.
+        include_agent_name: Use to specify how to expose the agent name to the underlying supervisor LLM.
 
             - None: Relies on the LLM provider using the name attribute on the AI message. Currently, only OpenAI supports this.
             - "inline": Add the agent name directly into the content field of the AI message using XML-style tags.
@@ -135,8 +135,8 @@ def create_supervisor(
     else:
         model = model.bind_tools(all_tools)
 
-    if format_agent_name:
-        model = with_agent_name(model, format_agent_name)
+    if include_agent_name:
+        model = with_agent_name(model, include_agent_name)
 
     supervisor_agent = create_react_agent(
         name=supervisor_name,

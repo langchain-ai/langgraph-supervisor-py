@@ -11,7 +11,7 @@ from langchain_core.tools import BaseTool, tool
 from langgraph.prebuilt import create_react_agent
 
 from langgraph_supervisor import create_supervisor
-from langgraph_supervisor.message import AgentNameFormat, with_agent_name
+from langgraph_supervisor.agent_name import AgentNameMode, with_agent_name
 
 
 class FakeChatModel(BaseChatModel):
@@ -147,16 +147,17 @@ math_agent_messages = [
 
 
 @pytest.mark.parametrize(
-    "format_agent_name,format_individual_agent_name",
+    "include_agent_name,include_individual_agent_name",
     [
-        (None, False),
-        ("inline", False),
-        ("inline", True),
+        (None, None),
+        (None, "inline"),
+        ("inline", None),
+        ("inline", "inline"),
     ],
 )
 def test_supervisor_basic_workflow(
-    format_agent_name: AgentNameFormat,
-    format_individual_agent_name: bool,
+    include_agent_name: AgentNameMode | None,
+    include_individual_agent_name: AgentNameMode | None,
 ) -> None:
     """Test basic supervisor workflow with two agents."""
 
@@ -179,8 +180,8 @@ def test_supervisor_basic_workflow(
         )
 
     math_model = FakeChatModel(responses=math_agent_messages)
-    if format_individual_agent_name:
-        math_model = with_agent_name(math_model.bind_tools([add]), format_agent_name)
+    if include_individual_agent_name:
+        math_model = with_agent_name(math_model.bind_tools([add]), include_individual_agent_name)
 
     math_agent = create_react_agent(
         model=math_model,
@@ -189,8 +190,10 @@ def test_supervisor_basic_workflow(
     )
 
     research_model = FakeChatModel(responses=research_agent_messages)
-    if format_individual_agent_name:
-        research_model = with_agent_name(research_model.bind_tools([web_search]), format_agent_name)
+    if include_individual_agent_name:
+        research_model = with_agent_name(
+            research_model.bind_tools([web_search]), include_individual_agent_name
+        )
 
     research_agent = create_react_agent(
         model=research_model,
@@ -201,7 +204,7 @@ def test_supervisor_basic_workflow(
     workflow = create_supervisor(
         [math_agent, research_agent],
         model=FakeChatModel(responses=supervisor_messages),
-        format_agent_name=format_agent_name,
+        include_agent_name=include_agent_name,
     )
 
     app = workflow.compile()
