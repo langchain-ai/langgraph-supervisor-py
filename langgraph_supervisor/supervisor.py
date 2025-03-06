@@ -149,6 +149,8 @@ def create_supervisor(
         and "parallel_tool_calls" in inspect.signature(model.bind_tools).parameters
     ):
         model = model.bind_tools(all_tools, parallel_tool_calls=False)
+    else:
+        model = model.bind_tools(all_tools)
 
     model = _attach_message_processors(
         model,

@@ -7,6 +7,7 @@ from langchain_core.callbacks.manager import CallbackManagerForLLMRun
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
 from langchain_core.outputs import ChatGeneration, ChatResult
+from langchain_core.tools import BaseTool
 from langgraph.prebuilt import create_react_agent
 
 from langgraph_supervisor import create_supervisor
@@ -32,8 +33,14 @@ class FakeChatModel(BaseChatModel):
         self.idx += 1
         return ChatResult(generations=[generation])
 
-    def bind_tools(self, tools: list[any]) -> "FakeChatModel":
-        return self
+    def bind_tools(self, tools: list[BaseTool]) -> "FakeChatModel":
+        tool_dicts = [
+            {
+                "name": tool.name,
+            }
+            for tool in tools
+        ]
+        return self.bind(tools=tool_dicts)
 
 
 supervisor_messages = [
