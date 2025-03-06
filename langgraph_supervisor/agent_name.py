@@ -25,10 +25,10 @@ def add_inline_agent_name(message: BaseMessage) -> BaseMessage:
 
     Examples:
 
-        >>> add_inline_agent_name_tags(AIMessage(content="Hello", name="assistant"))
+        >>> add_inline_agent_name(AIMessage(content="Hello", name="assistant"))
         AIMessage(content="<name>assistant</name><content>Hello</content>", name="assistant")
 
-        >>> add_inline_agent_name_tags(AIMessage(content=[{"type": "text", "text": "Hello"}], name="assistant"))
+        >>> add_inline_agent_name(AIMessage(content=[{"type": "text", "text": "Hello"}], name="assistant"))
         AIMessage(content=[{"type": "text", "text": "<name>assistant</name><content>Hello</content>"}], name="assistant")
     """
     if not isinstance(message, AIMessage) or not message.name:
@@ -49,14 +49,14 @@ def add_inline_agent_name(message: BaseMessage) -> BaseMessage:
 
 
 def remove_inline_agent_name(message: BaseMessage) -> BaseMessage:
-    """Removing explicit name and content XML tags from the AI message content.
+    """Remove explicit name and content XML tags from the AI message content.
 
     Examples:
 
-        >>> remove_inline_agent_name_tags(AIMessage(content="<name>assistant</name><content>Hello</content>", name="assistant"))
+        >>> remove_inline_agent_name(AIMessage(content="<name>assistant</name><content>Hello</content>", name="assistant"))
         AIMessage(content="Hello", name="assistant")
 
-        >>> remove_inline_agent_name_tags(AIMessage(content=[{"type": "text", "text": "<name>assistant</name><content>Hello</content>"}], name="assistant"))
+        >>> remove_inline_agent_name(AIMessage(content=[{"type": "text", "text": "<name>assistant</name><content>Hello</content>"}], name="assistant"))
         AIMessage(content=[{"type": "text", "text": "Hello"}], name="assistant")
     """
     if not isinstance(message, AIMessage) or not message.name:
