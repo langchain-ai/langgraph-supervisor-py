@@ -3,6 +3,7 @@ import uuid
 
 from langchain_core.messages import AIMessage, ToolCall, ToolMessage
 from langchain_core.tools import BaseTool, InjectedToolCallId, tool
+from langgraph.prebuilt import InjectedState
 from langgraph.types import Command
 from typing_extensions import Annotated
 
@@ -29,6 +30,7 @@ def create_handoff_tool(*, agent_name: str) -> BaseTool:
 
     @tool(tool_name)
     def handoff_to_agent(
+        state: Annotated[dict, InjectedState],
         tool_call_id: Annotated[str, InjectedToolCallId],
     ):
         """Ask another agent for help."""
@@ -40,7 +42,7 @@ def create_handoff_tool(*, agent_name: str) -> BaseTool:
         return Command(
             goto=agent_name,
             graph=Command.PARENT,
-            update={"messages": [tool_message]},
+            update={"messages": state["messages"] + [tool_message]},
         )
 
     return handoff_to_agent
