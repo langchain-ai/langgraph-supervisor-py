@@ -8,7 +8,7 @@ from langchain_core.runnables import RunnableLambda
 NAME_PATTERN = re.compile(r"<name>(.*?)</name>", re.DOTALL)
 CONTENT_PATTERN = re.compile(r"<content>(.*?)</content>", re.DOTALL)
 
-AgentNameFormat = Literal["xml_tags"]
+AgentNameFormat = Literal["inline"]
 
 
 def _is_content_blocks_content(content: list[dict] | str) -> bool:
@@ -20,15 +20,15 @@ def _is_content_blocks_content(content: list[dict] | str) -> bool:
     )
 
 
-def add_xml_tags_to_message_content(message: BaseMessage) -> BaseMessage:
+def add_inline_agent_name_tags(message: BaseMessage) -> BaseMessage:
     """Add name and content XML tags to the message content.
 
     Examples:
 
-        >>> add_xml_tags_to_message_content(AIMessage(content="Hello", name="assistant"))
+        >>> add_inline_agent_name_tags(AIMessage(content="Hello", name="assistant"))
         AIMessage(content="<name>assistant</name><content>Hello</content>", name="assistant")
 
-        >>> add_xml_tags_to_message_content(AIMessage(content=[{"type": "text", "text": "Hello"}], name="assistant"))
+        >>> add_inline_agent_name_tags(AIMessage(content=[{"type": "text", "text": "Hello"}], name="assistant"))
         AIMessage(content=[{"type": "text", "text": "<name>assistant</name><content>Hello</content>"}], name="assistant")
     """
     if not isinstance(message, AIMessage) or not message.name:
@@ -48,15 +48,15 @@ def add_xml_tags_to_message_content(message: BaseMessage) -> BaseMessage:
     return formatted_message
 
 
-def remove_xml_tags_from_message_content(message: BaseMessage) -> BaseMessage:
+def remove_inline_agent_name_tags(message: BaseMessage) -> BaseMessage:
     """Removing explicit name and content XML tags from the AI message content.
 
     Examples:
 
-        >>> remove_xml_tags_from_message_content(AIMessage(content="<name>assistant</name><content>Hello</content>", name="assistant"))
+        >>> remove_inline_agent_name_tags(AIMessage(content="<name>assistant</name><content>Hello</content>", name="assistant"))
         AIMessage(content="Hello", name="assistant")
 
-        >>> remove_xml_tags_from_message_content(AIMessage(content=[{"type": "text", "text": "<name>assistant</name><content>Hello</content>"}], name="assistant"))
+        >>> remove_inline_agent_name_tags(AIMessage(content=[{"type": "text", "text": "<name>assistant</name><content>Hello</content>"}], name="assistant"))
         AIMessage(content=[{"type": "text", "text": "Hello"}], name="assistant")
     """
     if not isinstance(message, AIMessage) or not message.name:
@@ -96,7 +96,7 @@ def remove_xml_tags_from_message_content(message: BaseMessage) -> BaseMessage:
 
 def with_agent_name(
     model: LanguageModelLike,
-    agent_name_format: AgentNameFormat,
+    format_agent_name: AgentNameFormat,
 ) -> LanguageModelLike:
     """Attach formatted agent names to the messages passed to and from a language model.
 
@@ -108,17 +108,17 @@ def with_agent_name(
 
     Args:
         model: Language model to add agent name formatting to.
-        agent_name_format: The formatting that will be applied to agent name when modifying message content.
-            - "xml_tags": Add name and content XML tags to the message content before passing to the LLM
-                and remove them after receiving the response.
+        format_agent_name: Use to specify how to expose the agent name to the LLM.
+            - "inline": Add the agent name directly into the content field of the AI message using XML-style tags.
+                Example: "How can I help you" -> "<name>agent_name</name><content>How can I help you?</content>".
     """
-    if agent_name_format == "xml_tags":
-        process_input_message = add_xml_tags_to_message_content
-        process_output_message = remove_xml_tags_from_message_content
+    if format_agent_name == "inline":
+        process_input_message = add_inline_agent_name_tags
+        process_output_message = remove_inline_agent_name_tags
 
     else:
         raise ValueError(
-            f"Invalid agent name format: {agent_name_format}. Needs to be one of: {AgentNameFormat.__args__}"
+            f"Invalid agent name format: {format_agent_name}. Needs to be one of: {AgentNameFormat.__args__}"
         )
 
     def process_input_messages(messages: list[BaseMessage]) -> list[BaseMessage]:

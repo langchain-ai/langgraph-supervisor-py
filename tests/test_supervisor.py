@@ -150,7 +150,8 @@ math_agent_messages = [
     "format_agent_name,format_individual_agent_name",
     [
         (None, False),
-        ("xml_tags", True),
+        ("inline", False),
+        ("inline", True),
     ],
 )
 def test_supervisor_basic_workflow(

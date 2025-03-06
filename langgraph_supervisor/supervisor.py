@@ -80,7 +80,7 @@ def create_supervisor(
     output_mode: OutputMode = "last_message",
     add_handoff_back_messages: bool = True,
     supervisor_name: str = "supervisor",
-    format_agent_name: AgentNameFormat | False = False,
+    format_agent_name: AgentNameFormat | None = None,
 ) -> StateGraph:
     """Create a multi-agent supervisor.
 
@@ -103,12 +103,11 @@ def create_supervisor(
         add_handoff_back_messages: Whether to add a pair of (AIMessage, ToolMessage) to the message history
             when returning control to the supervisor to indicate that a handoff has occurred.
         supervisor_name: Name of the supervisor node.
-        format_agent_name: Whether to optionally attach agent name to the messages passed to and from the language model.
-            This is useful for injecting additional information like the name of the agent into the message content.
+        format_agent_name: Use to specify how to expose the agent name to the underlying supervisor LLM.
 
-            Can be one of:
-            - "xml_tags": Add name and content XML tags to the message content before passing to the LLM
-                and remove them after receiving the response.
+            - None: Relies on the LLM provider using the name attribute on the AI message. Currently, only OpenAI supports this.
+            - "inline": Add the agent name directly into the content field of the AI message using XML-style tags.
+                Example: "How can I help you" -> "<name>agent_name</name><content>How can I help you?</content>"
     """
     agent_names = set()
     for agent in agents:
