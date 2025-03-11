@@ -1,5 +1,5 @@
 import inspect
-from typing import Any, Callable, Literal, Type
+from typing import Any, Callable, Literal, Optional, Type, Union
 
 from langchain_core.language_models import BaseChatModel, LanguageModelLike
 from langchain_core.tools import BaseTool
@@ -8,6 +8,7 @@ from langgraph.prebuilt.chat_agent_executor import (
     AgentState,
     Prompt,
     StateSchemaType,
+    StructuredResponseSchema,
     create_react_agent,
 )
 from langgraph.pregel import Pregel
@@ -94,6 +95,9 @@ def create_supervisor(
     model: LanguageModelLike,
     tools: list[BaseTool | Callable] | None = None,
     prompt: Prompt | None = None,
+    response_format: Optional[
+        Union[StructuredResponseSchema, tuple[str, StructuredResponseSchema]]
+    ] = None,
     state_schema: StateSchemaType = AgentState,
     config_schema: Type[Any] | None = None,
     output_mode: OutputMode = "last_message",
@@ -112,6 +116,25 @@ def create_supervisor(
             - SystemMessage: this is added to the beginning of the list of messages in state["messages"].
             - Callable: This function should take in full graph state and the output is then passed to the language model.
             - Runnable: This runnable should take in full graph state and the output is then passed to the language model.
+        response_format: An optional schema for the final agent output.
+
+            If provided, output will be formatted to match the given schema and returned in the 'structured_response' state key.
+            If not provided, `structured_response` will not be present in the output state.
+            Can be passed in as:
+
+                - an OpenAI function/tool schema,
+                - a JSON Schema,
+                - a TypedDict class,
+                - or a Pydantic class.
+                - a tuple (prompt, schema), where schema is one of the above.
+                    The prompt will be used together with the model that is being used to generate the structured response.
+
+            !!! Important
+                `response_format` requires the model to support `.with_structured_output`
+
+            !!! Note
+                `response_format` requires `structured_response` key in your state schema.
+                You can use the prebuilt `langgraph.prebuilt.chat_agent_executor.AgentStateWithStructuredResponse`.
         state_schema: State schema to use for the supervisor graph.
         config_schema: An optional schema for configuration.
             Use this to expose configurable parameters via supervisor.config_specs.
@@ -160,6 +183,7 @@ def create_supervisor(
         tools=all_tools,
         prompt=prompt,
         state_schema=state_schema,
+        response_format=response_format,
     )
 
     builder = StateGraph(state_schema, config_schema=config_schema)
