@@ -116,7 +116,7 @@ def create_supervisor(
             - SystemMessage: this is added to the beginning of the list of messages in state["messages"].
             - Callable: This function should take in full graph state and the output is then passed to the language model.
             - Runnable: This runnable should take in full graph state and the output is then passed to the language model.
-        response_format: An optional schema for the final agent output.
+        response_format: An optional schema for the final supervisor output.
 
             If provided, output will be formatted to match the given schema and returned in the 'structured_response' state key.
             If not provided, `structured_response` will not be present in the output state.
