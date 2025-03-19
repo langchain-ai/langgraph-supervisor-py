@@ -128,16 +128,19 @@ You can create multi-level hierarchical systems by creating a supervisor that ma
 research_team = create_supervisor(
     [research_agent, math_agent],
     model=model,
+    supervisor_name="research_supervisor"
 ).compile(name="research_team")
 
 writing_team = create_supervisor(
     [writing_agent, publishing_agent],
     model=model,
+    supervisor_name="writing_supervisor"
 ).compile(name="writing_team")
 
 top_level_supervisor = create_supervisor(
     [research_team, writing_team],
     model=model,
+    supervisor_name="top_level_supervisor"
 ).compile(name="top_level_supervisor")
 ```
 
