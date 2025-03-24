@@ -1,7 +1,6 @@
-import inspect
 from typing import Any, Callable, Literal, Optional, Type, Union
 
-from langchain_core.language_models import BaseChatModel, LanguageModelLike
+from langchain_core.language_models import LanguageModelLike
 from langchain_core.tools import BaseTool
 from langgraph.graph import END, START, StateGraph
 from langgraph.prebuilt.chat_agent_executor import (
@@ -26,25 +25,6 @@ OutputMode = Literal["full_history", "last_message"]
 - `full_history`: add the entire agent message history
 - `last_message`: add only the last message
 """
-
-
-MODELS_NO_PARALLEL_TOOL_CALLS = {"o3-mini"}
-
-
-def _supports_disable_parallel_tool_calls(model: LanguageModelLike) -> bool:
-    if not isinstance(model, BaseChatModel):
-        return False
-
-    if hasattr(model, "model_name") and model.model_name in MODELS_NO_PARALLEL_TOOL_CALLS:
-        return False
-
-    if not hasattr(model, "bind_tools"):
-        return False
-
-    if "parallel_tool_calls" not in inspect.signature(model.bind_tools).parameters:
-        return False
-
-    return True
 
 
 def _make_call_agent(
@@ -168,11 +148,7 @@ def create_supervisor(
 
     handoff_tools = [create_handoff_tool(agent_name=agent.name) for agent in agents]
     all_tools = (tools or []) + handoff_tools
-
-    if _supports_disable_parallel_tool_calls(model):
-        model = model.bind_tools(all_tools, parallel_tool_calls=False)
-    else:
-        model = model.bind_tools(all_tools)
+    model = model.bind_tools(all_tools)
 
     if include_agent_name:
         model = with_agent_name(model, include_agent_name)
