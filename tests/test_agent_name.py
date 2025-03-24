@@ -32,8 +32,8 @@ def test_add_inline_agent_name_content_blocks():
     ai_message = AIMessage(content=content_blocks, name="assistant")
     result = add_inline_agent_name(ai_message)
     assert result.content == [
-        {"type": "image", "image_url": "http://example.com/image.jpg"},
         {"type": "text", "text": "<name>assistant</name><content>Hello world</content>"},
+        {"type": "image", "image_url": "http://example.com/image.jpg"},
     ]
 
     # Test that content blocks without text blocks are returned unchanged
@@ -41,9 +41,9 @@ def test_add_inline_agent_name_content_blocks():
         {"type": "image", "image_url": "http://example.com/image.jpg"},
         {"type": "file", "file_url": "http://example.com/document.pdf"},
     ]
-    expected_content_blocks = content_blocks + [
+    expected_content_blocks = [
         {"type": "text", "text": "<name>assistant</name><content></content>"}
-    ]
+    ] + content_blocks
     ai_message = AIMessage(content=content_blocks, name="assistant")
     result = add_inline_agent_name(ai_message)
 
@@ -85,19 +85,19 @@ def test_remove_inline_agent_name_content_blocks():
     result = remove_inline_agent_name(ai_message)
 
     expected_content = [
-        {"type": "image", "image_url": "http://example.com/image.jpg"},
         {"type": "text", "text": "Hello world"},
+        {"type": "image", "image_url": "http://example.com/image.jpg"},
     ]
     assert result.content == expected_content
     assert result.name == "assistant"
 
     # Test that content blocks without text blocks are returned unchanged
     content_blocks = [
+        {"type": "text", "text": "<name>assistant</name><content></content>"},
         {"type": "image", "image_url": "http://example.com/image.jpg"},
         {"type": "file", "file_url": "http://example.com/document.pdf"},
-        {"type": "text", "text": "<name>assistant</name><content></content>"},
     ]
-    expected_content_blocks = content_blocks[:-1]
+    expected_content_blocks = content_blocks[1:]
     ai_message = AIMessage(content=content_blocks, name="assistant")
     result = remove_inline_agent_name(ai_message)
     assert result.content == expected_content_blocks
