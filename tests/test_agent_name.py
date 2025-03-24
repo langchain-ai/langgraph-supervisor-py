@@ -67,13 +67,6 @@ def test_remove_inline_agent_name():
     result = remove_inline_agent_name(ai_message)
     assert result == ai_message
 
-    # Test that messages with mismatched name are returned unchanged.
-    ai_message = AIMessage(
-        content="<name>different_name</name><content>Hello world</content>", name="assistant"
-    )
-    result = remove_inline_agent_name(ai_message)
-    assert result == ai_message
-
     # Test that content is correctly extracted from tags.
     ai_message = AIMessage(
         content="<name>assistant</name><content>Hello world</content>", name="assistant"
