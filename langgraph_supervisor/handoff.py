@@ -16,16 +16,10 @@ def _normalize_agent_name(agent_name: str) -> str:
     return WHITESPACE_RE.sub("_", agent_name.strip()).lower()
 
 
-def _make_default_tool_name(agent_name: str) -> str:
-    """Make a tool name for a given agent name."""
-    return f"transfer_to_{_normalize_agent_name(agent_name)}"
-
-
 def _remove_non_handoff_tool_calls(
-    messages: list[BaseMessage], agent_name: str
+    messages: list[BaseMessage], handoff_tool_name: str
 ) -> list[BaseMessage]:
     """Remove tool calls that are not meant for the agent."""
-    handoff_tool_name = _make_default_tool_name(agent_name)
     last_ai_message = cast(AIMessage, messages[-1])
     # if the supervisor is calling multiple agents/tools in parallel,
     # we need to remove tool calls that are not meant for this agent
@@ -70,7 +64,7 @@ def create_handoff_tool(*, agent_name: str) -> BaseTool:
             nodes as well as the tool names accepted by LLM providers
             (the tool name will look like this: `transfer_to_<agent_name>`).
     """
-    tool_name = _make_default_tool_name(agent_name)
+    tool_name = f"transfer_to_{_normalize_agent_name(agent_name)}"
 
     @tool(tool_name)
     def handoff_to_agent(
@@ -83,7 +77,7 @@ def create_handoff_tool(*, agent_name: str) -> BaseTool:
             name=tool_name,
             tool_call_id=tool_call_id,
         )
-        handoff_messages = _remove_non_handoff_tool_calls(state["messages"], agent_name) + [
+        handoff_messages = _remove_non_handoff_tool_calls(state["messages"], tool_name) + [
             tool_message
         ]
         return Command(
