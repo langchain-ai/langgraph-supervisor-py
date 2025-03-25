@@ -73,7 +73,7 @@ def create_handoff_tool(*, agent_name: str) -> BaseTool:
             tool_call_id=tool_call_id,
         )
         handoff_messages = (
-            _remove_non_handoff_tool_calls(state["messages"], agent_name) + tool_message
+            _remove_non_handoff_tool_calls(state["messages"], agent_name) + [tool_message]
         )
         return Command(
             goto=agent_name,
