@@ -1,6 +1,8 @@
 from typing import Any, Callable, Literal, Optional, Type, Union
 
 from langchain_core.language_models import LanguageModelLike
+from langchain_core.messages import AIMessage, BaseMessage
+from langchain_core.runnables import RunnableLambda
 from langchain_core.tools import BaseTool
 from langgraph.graph import END, START, StateGraph
 from langgraph.prebuilt.chat_agent_executor import (
@@ -17,6 +19,7 @@ from langgraph_supervisor.agent_name import AgentNameMode, with_agent_name
 from langgraph_supervisor.handoff import (
     create_handoff_back_messages,
     create_handoff_tool,
+    _normalize_agent_name,
 )
 
 OutputMode = Literal["full_history", "last_message"]
@@ -25,6 +28,59 @@ OutputMode = Literal["full_history", "last_message"]
 - `full_history`: add the entire agent message history
 - `last_message`: add only the last message
 """
+
+# --- Helper function to normalize tool calls in a message ---
+def _normalize_tool_calls_in_message(message: BaseMessage) -> BaseMessage:
+    """
+    Checks if a message is an AIMessage with tool calls. If so, normalizes
+    the names of tool calls starting with 'transfer_to_'.
+    """
+    if not isinstance(message, AIMessage) or not message.tool_calls:
+        return message  # Return unchanged if not an AIMessage or no tool calls
+
+    modified = False
+    normalized_tool_calls = []
+    for tool_call in message.tool_calls:
+        original_name = tool_call.get("name")
+        normalized_tool_call = dict(tool_call)  # Create a mutable copy
+
+        # Only normalize handoff tool calls
+        if original_name and original_name.startswith("transfer_to_"):
+            prefix = "transfer_to_"
+            agent_name_part = original_name[len(prefix) :]
+            normalized_agent_name_part = _normalize_agent_name(agent_name_part)
+            normalized_name = f"{prefix}{normalized_agent_name_part}"
+
+            if normalized_name != original_name:
+                normalized_tool_call["name"] = normalized_name
+                modified = True
+
+        normalized_tool_calls.append(normalized_tool_call)
+
+    # If any normalization occurred, return a new message object
+    if modified:
+        return AIMessage(
+            content=message.content,
+            tool_calls=normalized_tool_calls,
+            # Copy other relevant fields if necessary (e.g., id, name)
+            id=message.id,
+            name=message.name,
+            usage_metadata=message.usage_metadata,  # Pass usage if present
+            response_metadata=message.response_metadata,  # Pass response metadata if present
+        )
+    else:
+        return message  # Return original message if no changes were made
+
+
+# --- Wrapper function for the model ---
+def _wrap_model_for_tool_call_normalization(
+    model: LanguageModelLike,
+) -> LanguageModelLike:
+    """
+    Wraps a LanguageModelLike object to normalize tool call names in its output AIMessages.
+    """
+    # Use RunnableLambda to apply the normalization function after the model runs
+    return model | RunnableLambda(_normalize_tool_calls_in_message)
 
 
 def _make_call_agent(
@@ -148,10 +204,12 @@ def create_supervisor(
 
     handoff_tools = [create_handoff_tool(agent_name=agent.name) for agent in agents]
     all_tools = (tools or []) + handoff_tools
-    model = model.bind_tools(all_tools)
+    prepared_model = model.bind_tools(all_tools)
 
     if include_agent_name:
-        model = with_agent_name(model, include_agent_name)
+        prepared_model = with_agent_name(prepared_model, include_agent_name)
+
+    model = _wrap_model_for_tool_call_normalization(prepared_model)
 
     supervisor_agent = create_react_agent(
         name=supervisor_name,

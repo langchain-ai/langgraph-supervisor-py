@@ -1,5 +1,6 @@
 import re
 import uuid
+import unicodedata
 from typing import cast
 
 from langchain_core.messages import AIMessage, ToolCall, ToolMessage
@@ -13,7 +14,11 @@ WHITESPACE_RE = re.compile(r"\s+")
 
 def _normalize_agent_name(agent_name: str) -> str:
     """Normalize an agent name to be used inside the tool name."""
-    return WHITESPACE_RE.sub("_", agent_name.strip()).lower()
+    # First normalize unicode and remove diacritics
+    normalized = unicodedata.normalize('NFKD', agent_name)
+    normalized = ''.join([c for c in normalized if not unicodedata.combining(c)])
+    # Then replace whitespace with underscores and convert to lowercase
+    return WHITESPACE_RE.sub("_", normalized.strip()).lower()
 
 
 def _remove_non_handoff_tool_calls(
