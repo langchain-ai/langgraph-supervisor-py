@@ -16,6 +16,9 @@ This library is built on top of [LangGraph](https://github.com/langchain-ai/lang
 pip install langgraph-supervisor
 ```
 
+> [!Note]
+> LangGraph Supervisor requires Python >= 3.10
+
 ## Quickstart
 
 Here's a simple example of a supervisor managing two specialized agents:
