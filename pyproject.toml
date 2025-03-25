@@ -13,7 +13,7 @@ readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
     "langgraph>=0.3.5,<0.4.0",
-    "langgraph-prebuilt>=0.1.5,<0.2.0"
+    "langgraph-prebuilt>=0.1.6,<0.2.0"
 ]
 
 [dependency-groups]

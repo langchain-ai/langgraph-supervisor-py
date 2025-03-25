@@ -5,7 +5,7 @@ from typing import cast
 from langchain_core.messages import AIMessage, BaseMessage, ToolCall, ToolMessage
 from langchain_core.tools import BaseTool, InjectedToolCallId, tool
 from langgraph.prebuilt import InjectedState
-from langgraph.types import Command
+from langgraph.types import Command, Send
 from typing_extensions import Annotated
 
 WHITESPACE_RE = re.compile(r"\s+")
@@ -81,8 +81,12 @@ def create_handoff_tool(*, agent_name: str) -> BaseTool:
             tool_message
         ]
         return Command(
-            goto=agent_name,
             graph=Command.PARENT,
+            # NOTE: we are using Send here to allow the ToolNode in langgraph.prebuilt
+            # to handle parallel handoffs by combining all Send commands into a single command
+            goto=[Send(agent_name, {"messages": handoff_messages})],
+            # we also propagate the update to make sure the handoff messages are applied
+            # to the parent graph's state
             update={"messages": handoff_messages},
         )
 
