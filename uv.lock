@@ -299,15 +299,15 @@ wheels = [
 
 [[package]]
 name = "langgraph-prebuilt"
-version = "0.1.2"
+version = "0.1.5"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "langchain-core" },
     { name = "langgraph-checkpoint" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/99/68/e1e692dbaeb4e9159b60a585fbfc26fbf073b3bb061caa2ff3153f85121a/langgraph_prebuilt-0.1.2.tar.gz", hash = "sha256:cfa7e54006d45e8f3d034ee88fa1d457c381bf6a2a0de0e64c5d3a776659e6d0", size = 23310 }
+sdist = { url = "https://files.pythonhosted.org/packages/35/7f/acb6eb3e620f623bb18eec4b63afebad1b6c586efaaedd8f5be5c271f869/langgraph_prebuilt-0.1.5.tar.gz", hash = "sha256:0b0da357d9905f28f6e5c89ab6b333815a35cc68f4322b037c21c8c50d0d1d2e", size = 23633 }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/73/2c/2fd70d557b7343f766f79dc8184b391f3417fc85b34dd04439cdd12dc2e1/langgraph_prebuilt-0.1.2-py3-none-any.whl", hash = "sha256:32028c4c4370576748e6c2e075cab1e13b5e3f2c196a390d71cacfb455212311", size = 24684 },
+    { url = "https://files.pythonhosted.org/packages/a1/6e/5523983f103da1e16fef9e6ea3ab168efc6384066287e97c899ec57fe842/langgraph_prebuilt-0.1.5-py3-none-any.whl", hash = "sha256:dc7376e695e1a52bd2280f8acd12953fb8707e88f0665e228e7e274b3c061196", size = 25010 },
 ]
 
 [[package]]
@@ -344,7 +344,7 @@ test = [
 [package.metadata]
 requires-dist = [
     { name = "langgraph", specifier = ">=0.3.5,<0.4.0" },
-    { name = "langgraph-prebuilt", specifier = ">=0.1.2,<0.2.0" },
+    { name = "langgraph-prebuilt", specifier = ">=0.1.5,<0.2.0" },
 ]
 
 [package.metadata.requires-dev]
