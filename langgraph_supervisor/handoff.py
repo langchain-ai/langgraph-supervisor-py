@@ -80,7 +80,7 @@ def create_handoff_tool(*, agent_name: str) -> BaseTool:
                 graph=Command.PARENT,
                 # NOTE: we are using Send here to allow the ToolNode in langgraph.prebuilt
                 # to handle parallel handoffs by combining all Send commands into a single command
-                goto=[Send(agent_name, {"messages": handoff_messages})],
+                goto=[Send(agent_name, {**state, "messages": handoff_messages})],
             )
         # Handle single handoff
         else:
