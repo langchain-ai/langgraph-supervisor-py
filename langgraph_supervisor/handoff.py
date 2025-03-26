@@ -17,16 +17,14 @@ def _normalize_agent_name(agent_name: str) -> str:
 
 
 def _remove_non_handoff_tool_calls(
-    messages: list[BaseMessage], handoff_tool_name: str
+    messages: list[BaseMessage], handoff_tool_call_id: str
 ) -> list[BaseMessage]:
     """Remove tool calls that are not meant for the agent."""
     last_ai_message = cast(AIMessage, messages[-1])
     # if the supervisor is calling multiple agents/tools in parallel,
     # we need to remove tool calls that are not meant for this agent
     # to ensure that the resulting message history is valid
-    if len(last_ai_message.tool_calls) > 1 and any(
-        tool_call["name"] == handoff_tool_name for tool_call in last_ai_message.tool_calls
-    ):
+    if len(last_ai_message.tool_calls) > 1:
         content = last_ai_message.content
         if isinstance(content, list) and len(content) > 1 and isinstance(content[0], dict):
             content = [
@@ -34,7 +32,7 @@ def _remove_non_handoff_tool_calls(
                 for content_block in content
                 if (
                     content_block["type"] == "tool_use"
-                    and content_block["name"] == handoff_tool_name
+                    and content_block["id"] == handoff_tool_call_id
                 )
                 or content_block["type"] != "tool_use"
             ]
@@ -44,7 +42,7 @@ def _remove_non_handoff_tool_calls(
             tool_calls=[
                 tool_call
                 for tool_call in last_ai_message.tool_calls
-                if tool_call["name"] == handoff_tool_name
+                if tool_call["id"] == handoff_tool_call_id
             ],
             name=last_ai_message.name,
             id=str(uuid.uuid4()),
@@ -77,7 +75,7 @@ def create_handoff_tool(*, agent_name: str) -> BaseTool:
             name=tool_name,
             tool_call_id=tool_call_id,
         )
-        handoff_messages = _remove_non_handoff_tool_calls(state["messages"], tool_name) + [
+        handoff_messages = _remove_non_handoff_tool_calls(state["messages"], tool_call_id) + [
             tool_message
         ]
         return Command(
