@@ -2,7 +2,7 @@ import re
 import uuid
 from typing import cast
 
-from langchain_core.messages import AIMessage, BaseMessage, ToolCall, ToolMessage
+from langchain_core.messages import AIMessage, ToolCall, ToolMessage
 from langchain_core.tools import BaseTool, InjectedToolCallId, tool
 from langgraph.prebuilt import InjectedState
 from langgraph.types import Command, Send
@@ -17,38 +17,32 @@ def _normalize_agent_name(agent_name: str) -> str:
 
 
 def _remove_non_handoff_tool_calls(
-    messages: list[BaseMessage], handoff_tool_call_id: str
-) -> list[BaseMessage]:
+    last_ai_message: AIMessage, handoff_tool_call_id: str
+) -> AIMessage:
     """Remove tool calls that are not meant for the agent."""
-    last_ai_message = cast(AIMessage, messages[-1])
     # if the supervisor is calling multiple agents/tools in parallel,
     # we need to remove tool calls that are not meant for this agent
     # to ensure that the resulting message history is valid
-    if len(last_ai_message.tool_calls) > 1:
-        content = last_ai_message.content
-        if isinstance(content, list) and len(content) > 1 and isinstance(content[0], dict):
-            content = [
-                content_block
-                for content_block in content
-                if (
-                    content_block["type"] == "tool_use"
-                    and content_block["id"] == handoff_tool_call_id
-                )
-                or content_block["type"] != "tool_use"
-            ]
+    content = last_ai_message.content
+    if isinstance(content, list) and len(content) > 1 and isinstance(content[0], dict):
+        content = [
+            content_block
+            for content_block in content
+            if (content_block["type"] == "tool_use" and content_block["id"] == handoff_tool_call_id)
+            or content_block["type"] != "tool_use"
+        ]
 
-        last_ai_message = AIMessage(
-            content=content,
-            tool_calls=[
-                tool_call
-                for tool_call in last_ai_message.tool_calls
-                if tool_call["id"] == handoff_tool_call_id
-            ],
-            name=last_ai_message.name,
-            id=str(uuid.uuid4()),
-        )
-
-    return messages[:-1] + [last_ai_message]
+    last_ai_message = AIMessage(
+        content=content,
+        tool_calls=[
+            tool_call
+            for tool_call in last_ai_message.tool_calls
+            if tool_call["id"] == handoff_tool_call_id
+        ],
+        name=last_ai_message.name,
+        id=str(uuid.uuid4()),
+    )
+    return last_ai_message
 
 
 def create_handoff_tool(*, agent_name: str) -> BaseTool:
@@ -75,18 +69,27 @@ def create_handoff_tool(*, agent_name: str) -> BaseTool:
             name=tool_name,
             tool_call_id=tool_call_id,
         )
-        handoff_messages = _remove_non_handoff_tool_calls(state["messages"], tool_call_id) + [
-            tool_message
-        ]
-        return Command(
-            graph=Command.PARENT,
-            # NOTE: we are using Send here to allow the ToolNode in langgraph.prebuilt
-            # to handle parallel handoffs by combining all Send commands into a single command
-            goto=[Send(agent_name, {"messages": handoff_messages})],
-            # we also propagate the update to make sure the handoff messages are applied
-            # to the parent graph's state
-            update={"messages": handoff_messages},
-        )
+        last_ai_message = cast(AIMessage, state["messages"][-1])
+        # Handle parallel handoffs
+        if len(last_ai_message.tool_calls) > 1:
+            handoff_messages = state["messages"][:-1] + [
+                _remove_non_handoff_tool_calls(last_ai_message, tool_call_id),
+                tool_message,
+            ]
+            return Command(
+                graph=Command.PARENT,
+                # NOTE: we are using Send here to allow the ToolNode in langgraph.prebuilt
+                # to handle parallel handoffs by combining all Send commands into a single command
+                goto=[Send(agent_name, {"messages": handoff_messages})],
+            )
+        # Handle single handoff
+        else:
+            handoff_messages = state["messages"] + [tool_message]
+            return Command(
+                goto=agent_name,
+                graph=Command.PARENT,
+                update={"messages": handoff_messages},
+            )
 
     return handoff_to_agent
 
