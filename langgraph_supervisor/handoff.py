@@ -104,7 +104,7 @@ def create_handoff_back_messages(
     supervisor_name = supervisor_name.replace("_", " ").replace("-", " ")
     return (
         AIMessage(
-            content=f"\n\nTransferring back to {supervisor_name}",
+            content=f"\n\nTransferring back to {supervisor_name}.",
             tool_calls=tool_calls,
             name=agent_name,
         ),
