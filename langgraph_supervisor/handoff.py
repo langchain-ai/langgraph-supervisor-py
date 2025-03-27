@@ -103,7 +103,7 @@ def create_handoff_back_messages(
     tool_calls = [ToolCall(name=tool_name, args={}, id=tool_call_id)]
     return (
         AIMessage(
-            content=f"Transferring back to {supervisor_name}",
+            content=f"\n\nTransferring back to {supervisor_name}",
             tool_calls=tool_calls,
             name=agent_name,
         ),
