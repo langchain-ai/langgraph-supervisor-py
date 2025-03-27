@@ -101,9 +101,10 @@ def create_handoff_back_messages(
     tool_call_id = str(uuid.uuid4())
     tool_name = f"transfer_back_to_{_normalize_agent_name(supervisor_name)}"
     tool_calls = [ToolCall(name=tool_name, args={}, id=tool_call_id)]
+    supervisor_name = supervisor_name.replace("_", " ").replace("-", " ")
     return (
         AIMessage(
-            content=f"Transferring back to {supervisor_name}",
+            content=f"\n\nTransferring back to {supervisor_name}.",
             tool_calls=tool_calls,
             name=agent_name,
         ),
