@@ -1,6 +1,7 @@
+import inspect
 from typing import Any, Callable, Literal, Optional, Type, Union
 
-from langchain_core.language_models import LanguageModelLike
+from langchain_core.language_models import BaseChatModel, LanguageModelLike
 from langchain_core.tools import BaseTool
 from langgraph.graph import END, START, StateGraph
 from langgraph.prebuilt.chat_agent_executor import (
@@ -25,6 +26,25 @@ OutputMode = Literal["full_history", "last_message"]
 - `full_history`: add the entire agent message history
 - `last_message`: add only the last message
 """
+
+
+MODELS_NO_PARALLEL_TOOL_CALLS = {"o3-mini"}
+
+
+def _supports_disable_parallel_tool_calls(model: LanguageModelLike) -> bool:
+    if not isinstance(model, BaseChatModel):
+        return False
+
+    if hasattr(model, "model_name") and model.model_name in MODELS_NO_PARALLEL_TOOL_CALLS:
+        return False
+
+    if not hasattr(model, "bind_tools"):
+        return False
+
+    if "parallel_tool_calls" not in inspect.signature(model.bind_tools).parameters:
+        return False
+
+    return True
 
 
 def _make_call_agent(
@@ -78,6 +98,7 @@ def create_supervisor(
     response_format: Optional[
         Union[StructuredResponseSchema, tuple[str, StructuredResponseSchema]]
     ] = None,
+    parallel_tool_calls: bool = False,
     state_schema: StateSchemaType = AgentState,
     config_schema: Type[Any] | None = None,
     output_mode: OutputMode = "last_message",
@@ -115,6 +136,14 @@ def create_supervisor(
             !!! Note
                 `response_format` requires `structured_response` key in your state schema.
                 You can use the prebuilt `langgraph.prebuilt.chat_agent_executor.AgentStateWithStructuredResponse`.
+        parallel_tool_calls: Whether to allow the supervisor LLM to call tools in parallel (only OpenAI and Anthropic).
+            Use this to control whether the supervisor can hand off to multiple agents at once.
+            If True, will enable parallel tool calls.
+            If False, will disable parallel tool calls (default).
+
+            !!! Important
+                This is currently supported only by OpenAI and Anthropic models.
+                To control parallel tool calling for other providers, add explicit instructions for tool use to the system prompt.
         state_schema: State schema to use for the supervisor graph.
         config_schema: An optional schema for configuration.
             Use this to expose configurable parameters via supervisor.config_specs.
@@ -148,7 +177,11 @@ def create_supervisor(
 
     handoff_tools = [create_handoff_tool(agent_name=agent.name) for agent in agents]
     all_tools = (tools or []) + handoff_tools
-    model = model.bind_tools(all_tools)
+
+    if _supports_disable_parallel_tool_calls(model):
+        model = model.bind_tools(all_tools, parallel_tool_calls=parallel_tool_calls)
+    else:
+        model = model.bind_tools(all_tools)
 
     if include_agent_name:
         model = with_agent_name(model, include_agent_name)
