@@ -9,6 +9,7 @@ from langgraph.types import Command, Send
 from typing_extensions import Annotated
 
 WHITESPACE_RE = re.compile(r"\s+")
+METADATA_KEY_HANDOFF_DESTINATION = "__handoff_destination"
 
 
 def _normalize_agent_name(agent_name: str) -> str:
@@ -45,7 +46,9 @@ def _remove_non_handoff_tool_calls(
     return last_ai_message
 
 
-def create_handoff_tool(*, agent_name: str) -> BaseTool:
+def create_handoff_tool(
+    *, agent_name: str, name: str | None = None, description: str | None = None
+) -> BaseTool:
     """Create a tool that can handoff control to the requested agent.
 
     Args:
@@ -55,18 +58,24 @@ def create_handoff_tool(*, agent_name: str) -> BaseTool:
             although you are only limited to the names accepted by LangGraph
             nodes as well as the tool names accepted by LLM providers
             (the tool name will look like this: `transfer_to_<agent_name>`).
+        name: Optional name of the tool to use for the handoff.
+            If not provided, the tool name will be `transfer_to_<agent_name>`.
+        description: Optional description for the handoff tool.
     """
-    tool_name = f"transfer_to_{_normalize_agent_name(agent_name)}"
+    if name is None:
+        name = f"transfer_to_{_normalize_agent_name(agent_name)}"
 
-    @tool(tool_name)
+    if description is None:
+        description = f"Ask agent '{agent_name}' for help"
+
+    @tool(name, description=description)
     def handoff_to_agent(
         state: Annotated[dict, InjectedState],
         tool_call_id: Annotated[str, InjectedToolCallId],
     ):
-        """Ask another agent for help."""
         tool_message = ToolMessage(
             content=f"Successfully transferred to {agent_name}",
-            name=tool_name,
+            name=name,
             tool_call_id=tool_call_id,
         )
         last_ai_message = cast(AIMessage, state["messages"][-1])
@@ -91,6 +100,7 @@ def create_handoff_tool(*, agent_name: str) -> BaseTool:
                 update={"messages": handoff_messages},
             )
 
+    handoff_to_agent.metadata = {METADATA_KEY_HANDOFF_DESTINATION: agent_name}
     return handoff_to_agent
 
 

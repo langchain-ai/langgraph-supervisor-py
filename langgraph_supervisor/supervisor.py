@@ -16,6 +16,7 @@ from langgraph.utils.runnable import RunnableCallable
 
 from langgraph_supervisor.agent_name import AgentNameMode, with_agent_name
 from langgraph_supervisor.handoff import (
+    METADATA_KEY_HANDOFF_DESTINATION,
     create_handoff_back_messages,
     create_handoff_tool,
 )
@@ -87,6 +88,16 @@ def _make_call_agent(
         return _process_output(output)
 
     return RunnableCallable(call_agent, acall_agent)
+
+
+def _get_handoff_destinations(tools: list[BaseTool | Callable]) -> list[str]:
+    return [
+        tool.metadata[METADATA_KEY_HANDOFF_DESTINATION]
+        for tool in tools
+        if isinstance(tool, BaseTool)
+        and tool.metadata is not None
+        and METADATA_KEY_HANDOFF_DESTINATION in tool.metadata
+    ]
 
 
 def create_supervisor(
@@ -175,8 +186,19 @@ def create_supervisor(
 
         agent_names.add(agent.name)
 
-    handoff_tools = [create_handoff_tool(agent_name=agent.name) for agent in agents]
-    all_tools = (tools or []) + handoff_tools
+    handoff_destinations = _get_handoff_destinations(tools or [])
+    if handoff_destinations:
+        if missing_handoff_destinations := set(agent_names) - set(handoff_destinations):
+            raise ValueError(
+                "When providing custom handoff tools, you must provide them for all subagents. "
+                f"Missing handoff tools for agents '{missing_handoff_destinations}'."
+            )
+
+        # Handoff tools should be already provided here
+        all_tools = tools or []
+    else:
+        handoff_destinations = [create_handoff_tool(agent_name=agent.name) for agent in agents]
+        all_tools = (tools or []) + handoff_destinations
 
     if _supports_disable_parallel_tool_calls(model):
         model = model.bind_tools(all_tools, parallel_tool_calls=parallel_tool_calls)
