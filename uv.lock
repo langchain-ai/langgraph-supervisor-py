@@ -325,10 +325,9 @@ wheels = [
 
 [[package]]
 name = "langgraph-supervisor"
-version = "0.0.15"
+version = "0.0.16"
 source = { editable = "." }
 dependencies = [
-    { name = "langchain-core" },
     { name = "langgraph" },
     { name = "langgraph-prebuilt" },
 ]
@@ -344,7 +343,6 @@ test = [
 
 [package.metadata]
 requires-dist = [
-    { name = "langchain-core", specifier = ">=0.3.41" },
     { name = "langgraph", specifier = ">=0.3.5,<0.4.0" },
     { name = "langgraph-prebuilt", specifier = ">=0.1.7,<0.2.0" },
 ]
