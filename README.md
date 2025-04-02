@@ -183,7 +183,7 @@ By default, the supervisor uses handoff tools created with the prebuilt `create_
 
 * change tool name and/or description
 * add tool call arguments for the LLM to populate, for example a task description for the next agent
-* change what data is passed to the next agent as part of the handoff: by default `create_handoff_tool` passes **full** message history (all of the messages generated in the swarm up to this point), as well as the contents of `Command.update` to the next agent
+* change what data is passed to the subagent as part of the handoff: by default `create_handoff_tool` passes **full** message history (all of the messages generated in the supervisor up to this point), as well as a tool message indicating successful handoff.
 
 Here is an example of how to pass customized handoff tools to `create_supervisor`:
 
