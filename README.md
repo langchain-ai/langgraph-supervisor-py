@@ -175,6 +175,74 @@ app = workflow.compile(
 )
 ```
 
+## How to customize
+
+### Customizing handoff tools
+
+By default, the supervisor uses handoff tools created with the prebuilt `create_handoff_tool`. You can also create your own, custom handoff tools. Here are some ideas on how you can modify the default implementation:
+
+* change tool name and/or description
+* add tool call arguments for the LLM to populate, for example a task description for the next agent
+* change what data is passed to the next agent as part of the handoff: by default `create_handoff_tool` passes **full** message history (all of the messages generated in the swarm up to this point), as well as the contents of `Command.update` to the next agent
+
+Here is an example of how to pass customized handoff tools to `create_supervisor`:
+
+```python
+from langgraph_supervisor import create_handoff_tool
+workflow = create_supervisor(
+    [research_agent, math_agent],
+    tools=[
+        create_handoff_tool(agent_name="math_expert", name="assign_to_math_expert", description="Assign task to math expert"),
+        create_handoff_tool(agent_name="research_expert", name="assign_to_research_expert", description="Assign task to research expert")
+    ],
+    model=model,
+)
+```
+
+Here is an example of what a custom handoff tool might look like:
+
+```python
+from typing import Annotated
+
+from langchain_core.tools import tool, BaseTool, InjectedToolCallId
+from langchain_core.messages import ToolMessage
+from langgraph.types import Command
+from langgraph.prebuilt import InjectedState
+
+def create_custom_handoff_tool(*, agent_name: str, name: str | None, description: str | None) -> BaseTool:
+
+    @tool(name, description=description)
+    def handoff_to_agent(
+        # you can add additional tool call arguments for the LLM to populate
+        # for example, you can ask the LLM to populate a task description for the next agent
+        task_description: Annotated[str, "Detailed description of what the next agent should do, including all of the relevant context."],
+        # you can inject the state of the agent that is calling the tool
+        state: Annotated[dict, InjectedState],
+        tool_call_id: Annotated[str, InjectedToolCallId],
+    ):
+        tool_message = ToolMessage(
+            content=f"Successfully transferred to {agent_name}",
+            name=name,
+            tool_call_id=tool_call_id,
+        )
+        messages = state["messages"]
+        return Command(
+            goto=agent_name,
+            graph=Command.PARENT,
+            # NOTE: this is a state update that will be applied to the swarm multi-agent graph (i.e., the PARENT graph)
+            update={
+                "messages": messages + [tool_message],
+                "active_agent": agent_name,
+                # optionally pass the task description to the next agent
+                # NOTE: individual agents would need to have `task_description` in their state schema
+                # and would need to implement logic for how to consume it
+                "task_description": task_description,
+            },
+        )
+
+    return handoff_to_agent
+```
+
 ## Using Functional API 
 
 Here's a simple example of a supervisor managing two specialized agentic workflows created using Functional API:
