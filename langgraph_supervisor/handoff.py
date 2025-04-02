@@ -10,6 +10,7 @@ from typing_extensions import Annotated
 
 WHITESPACE_RE = re.compile(r"\s+")
 METADATA_KEY_HANDOFF_DESTINATION = "__handoff_destination"
+METADATA_KEY_IS_HANDOFF_BACK = "__is_handoff_back"
 
 
 def _normalize_agent_name(agent_name: str) -> str:
@@ -117,10 +118,12 @@ def create_handoff_back_messages(
             content=f"Transferring back to {supervisor_name}",
             tool_calls=tool_calls,
             name=agent_name,
+            response_metadata={METADATA_KEY_IS_HANDOFF_BACK: True},
         ),
         ToolMessage(
             content=f"Successfully transferred back to {supervisor_name}",
             name=tool_name,
             tool_call_id=tool_call_id,
+            response_metadata={METADATA_KEY_IS_HANDOFF_BACK: True},
         ),
     )
