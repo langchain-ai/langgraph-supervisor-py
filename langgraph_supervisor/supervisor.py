@@ -29,7 +29,7 @@ OutputMode = Literal["full_history", "last_message"]
 """
 
 
-MODELS_NO_PARALLEL_TOOL_CALLS = {"o3-mini", "o3", "o4-mini" ,"gpt-4.1"}
+MODELS_NO_PARALLEL_TOOL_CALLS = {"o3-mini", "o3", "o4-mini"}
 
 
 def _supports_disable_parallel_tool_calls(model: LanguageModelLike) -> bool:
