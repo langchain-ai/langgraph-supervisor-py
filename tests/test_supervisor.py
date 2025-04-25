@@ -275,3 +275,134 @@ def test_supervisor_basic_workflow(
     assert result_full_history["messages"][17] == math_agent_messages[2]
     # final supervisor message
     assert result_full_history["messages"][-1] == supervisor_messages[-1]
+
+
+def test_supervisor_message_forwarding():
+    """Test that the supervisor forwards a message to a specific agent and receives the correct response."""
+
+    @tool
+    def echo_tool(text: str) -> str:
+        """Echo the input text."""
+        return text
+
+    # Agent that simply echoes the message
+    echo_model = FakeChatModel(
+        responses=[
+            AIMessage(content="Echo: test forwarding!"),
+        ]
+    )
+    echo_agent = create_react_agent(
+        model=echo_model.bind_tools([echo_tool]),
+        tools=[echo_tool],
+        name="echo_agent",
+    )
+
+    supervisor_messages = [
+        AIMessage(
+            content="",
+            tool_calls=[
+                {
+                    "name": "transfer_to_echo_agent",
+                    "args": {},
+                    "id": "call_gyQSgJQm5jJtPcF5ITe8GGGF",
+                    "type": "tool_call",
+                }
+            ],
+        ),
+        AIMessage(
+            content="",
+            tool_calls=[
+                {
+                    "name": "forward_message",
+                    "args": {"from_agent": "echo_agent"},
+                    "id": "abcd123",
+                    "type": "tool_call",
+                }
+            ],
+        ),
+    ]
+
+    workflow = create_supervisor(
+        [echo_agent],
+        model=FakeChatModel(responses=supervisor_messages),
+        enable_forwarding=True,
+    )
+    app = workflow.compile()
+
+    result = app.invoke({"messages": [HumanMessage(content="Scooby-dooby-doo")]})
+
+    def get_tool_calls(msg):
+        tool_calls = getattr(msg, "tool_calls", None)
+        if tool_calls is None:
+            return None
+        return [
+            {"name": tc["name"], "args": tc["args"]}
+            for tc in tool_calls
+            if tc["type"] == "tool_call"
+        ]
+
+    received = [
+        {
+            "name": msg.name,
+            "content": msg.content,
+            "tool_calls": get_tool_calls(msg),
+            "type": msg.type,
+        }
+        for msg in result["messages"]
+    ]
+
+    expected = [
+        {
+            "name": None,
+            "content": "Scooby-dooby-doo",
+            "tool_calls": None,
+            "type": "human",
+        },
+        {
+            "name": "supervisor",
+            "content": "",
+            "tool_calls": [
+                {
+                    "name": "transfer_to_echo_agent",
+                    "args": {},
+                }
+            ],
+            "type": "ai",
+        },
+        {
+            "name": "transfer_to_echo_agent",
+            "content": "Successfully transferred to echo_agent",
+            "tool_calls": None,
+            "type": "tool",
+        },
+        {
+            "name": "echo_agent",
+            "content": "Echo: test forwarding!",
+            "tool_calls": [],
+            "type": "ai",
+        },
+        {
+            "name": "echo_agent",
+            "content": "Transferring back to supervisor",
+            "tool_calls": [
+                {
+                    "name": "transfer_back_to_supervisor",
+                    "args": {},
+                }
+            ],
+            "type": "ai",
+        },
+        {
+            "name": "transfer_back_to_supervisor",
+            "content": "Successfully transferred back to supervisor",
+            "tool_calls": None,
+            "type": "tool",
+        },
+        {
+            "name": "supervisor",
+            "content": "Echo: test forwarding!",
+            "tool_calls": [],
+            "type": "ai",
+        },
+    ]
+    assert received == expected

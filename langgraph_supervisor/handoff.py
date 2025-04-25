@@ -127,3 +127,64 @@ def create_handoff_back_messages(
             response_metadata={METADATA_KEY_IS_HANDOFF_BACK: True},
         ),
     )
+
+
+def create_forward_message_tool(supervisor_name: str = "supervisor") -> BaseTool:
+    """Create a tool the supervisor can use to forward a worker message by name.
+
+    This helps avoid information loss any time the supervisor rewrites a worker query
+    to the user and also can save some tokens.
+
+    Args:
+        supervisor_name: The name of the supervisor node (used for namespacing the tool).
+
+    Returns:
+        BaseTool: The 'forward_message' tool.
+    """
+    tool_name = "forward_message"
+    desc = (
+        "Forwards the latest message from the specified agent to the user"
+        " without any changes. Use this to preserve information fidelity, avoid"
+        " misinterpretation of questions or responses, and save time."
+    )
+
+    @tool(tool_name, description=desc)
+    def forward_message(
+        from_agent: str,
+        state: Annotated[dict, InjectedState],
+    ):
+        target_message = next(
+            (
+                (i, m)
+                for i, m in enumerate(reversed(state["messages"]))
+                if isinstance(m, AIMessage)
+                and (m.name or "").lower() == from_agent.lower()
+                and not m.response_metadata.get(METADATA_KEY_IS_HANDOFF_BACK)
+            ),
+            None,
+        )
+        if not target_message:
+            found_names = set(
+                m.name for m in state["messages"] if isinstance(m, AIMessage) and m.name
+            )
+            return (
+                f"Could not find message from source agent {from_agent}. Found names: {found_names}"
+            )
+        updates = [
+            AIMessage(
+                content=target_message[1].content,
+                name=supervisor_name,
+                id=str(uuid.uuid4()),
+            ),
+        ]
+
+        return Command(
+            graph=Command.PARENT,
+            # NOTE: this does nothing.
+            goto="__end__",
+            # we also propagate the update to make sure the handoff messages are applied
+            # to the parent graph's state
+            update={"messages": updates},
+        )
+
+    return forward_message
