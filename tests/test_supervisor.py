@@ -181,9 +181,7 @@ def test_supervisor_basic_workflow(
 
     math_model = FakeChatModel(responses=math_agent_messages)
     if include_individual_agent_name:
-        math_model = with_agent_name(
-            math_model.bind_tools([add]), include_individual_agent_name
-        )
+        math_model = with_agent_name(math_model.bind_tools([add]), include_individual_agent_name)
 
     math_agent = create_react_agent(
         model=math_model,
@@ -282,10 +280,6 @@ def test_supervisor_basic_workflow(
 class FakeChatModelWithAssertion(FakeChatModel):
     assertion: Callable[[list[BaseMessage]], None]
 
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.assertion = lambda x: None
-
     def _generate(
         self,
         messages: list[BaseMessage],
@@ -296,10 +290,6 @@ class FakeChatModelWithAssertion(FakeChatModel):
         self.assertion(messages)
         return super()._generate(messages, stop, run_manager, **kwargs)
 
-    def invoke(self, messages: list[BaseMessage], *args, **kwargs) -> ChatResult:
-        breakpoint()
-        return super().invoke(messages, *args, **kwargs)
-
 
 def test_worker_hide_handoffs():
     """Test that the supervisor forwards a message to a specific agent and receives the correct response."""
@@ -309,21 +299,71 @@ def test_worker_hide_handoffs():
         """Echo the input text."""
         return text
 
-    # Agent that echoes the message
+    def get_tool_calls(msg):
+        tool_calls = getattr(msg, "tool_calls", None)
+        if tool_calls is None:
+            return None
+        return [
+            {"name": tc["name"], "args": tc["args"]}
+            for tc in tool_calls
+            if tc["type"] == "tool_call"
+        ]
+
+    def as_dict(msg):
+        return {
+            "name": msg.name,
+            "content": msg.content,
+            "tool_calls": get_tool_calls(msg),
+            "type": msg.type,
+        }
+
+    expectations = [
+        [
+            {
+                "name": None,
+                "content": "Scooby-dooby-doo",
+                "tool_calls": None,
+                "type": "human",
+            }
+        ],
+        [
+            {
+                "name": None,
+                "content": "Scooby-dooby-doo",
+                "tool_calls": None,
+                "type": "human",
+            },
+            {
+                "name": "echo_agent",
+                "content": "Echo 1!",
+                "tool_calls": [],
+                "type": "ai",
+            },
+            {"name": "supervisor", "content": "boo", "tool_calls": [], "type": "ai"},
+            {
+                "name": None,
+                "content": "Huh take two?",
+                "tool_calls": None,
+                "type": "human",
+            },
+        ],
+    ]
+
     class Assertion:
-        def __init__(self):
-            self.call_count = 0
+        def __init__(self, expected: list[dict]):
+            self.expected = expected.copy()
 
         def __call__(self, messages: list[BaseMessage]):
-            self.call_count += 1
-            breakpoint()
+            expected = self.expected.pop(0)
+            received = [as_dict(m) for m in messages]
+            assert expected == received
 
     echo_model = FakeChatModelWithAssertion(
         responses=[
             AIMessage(content="Echo 1!"),
             AIMessage(content="Echo 2!"),
         ],
-        assertion=Assertion(),
+        assertion=Assertion(expectations),
     )
     echo_agent = create_react_agent(
         model=echo_model.bind_tools([echo_tool]),
@@ -344,6 +384,9 @@ def test_worker_hide_handoffs():
             ],
         ),
         AIMessage(
+            content="boo",
+        ),
+        AIMessage(
             content="",
             tool_calls=[
                 {
@@ -355,35 +398,16 @@ def test_worker_hide_handoffs():
             ],
         ),
         AIMessage(
-            content="boo",
+            content="END",
         ),
     ]
 
     workflow = create_supervisor(
         [echo_agent],
         model=FakeChatModel(responses=supervisor_messages),
-        output_mode="only_history",
+        omit_handoffs=True,
     )
     app = workflow.compile()
 
     result = app.invoke({"messages": [HumanMessage(content="Scooby-dooby-doo")]})
-
-    def get_tool_calls(msg):
-        tool_calls = getattr(msg, "tool_calls", None)
-        if tool_calls is None:
-            return None
-        return [
-            {"name": tc["name"], "args": tc["args"]}
-            for tc in tool_calls
-            if tc["type"] == "tool_call"
-        ]
-
-    # received = [
-    #     {
-    #         "name": msg.name,
-    #         "content": msg.content,
-    #         "tool_calls": get_tool_calls(msg),
-    #         "type": msg.type,
-    #     }
-    #     for msg in result["messages"]
-    # ]
+    app.invoke({"messages": result["messages"] + [HumanMessage(content="Huh take two?")]})

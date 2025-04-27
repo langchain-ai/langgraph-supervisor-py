@@ -2,7 +2,6 @@ import inspect
 from typing import Any, Callable, Literal, Optional, Type, Union
 
 from langchain_core.language_models import BaseChatModel, LanguageModelLike
-from langchain_core.messages import AIMessage, RemoveMessage, ToolMessage
 from langchain_core.tools import BaseTool
 from langgraph.graph import END, START, StateGraph
 from langgraph.prebuilt.chat_agent_executor import (
@@ -18,12 +17,11 @@ from langgraph.utils.runnable import RunnableCallable
 from langgraph_supervisor.agent_name import AgentNameMode, with_agent_name
 from langgraph_supervisor.handoff import (
     METADATA_KEY_HANDOFF_DESTINATION,
-    METADATA_KEY_IS_HANDOFF_BACK,
     create_handoff_back_messages,
     create_handoff_tool,
 )
 
-OutputMode = Literal["full_history", "only_history", "last_message"]
+OutputMode = Literal["full_history", "last_message"]
 """Mode for adding agent outputs to the message history in the multi-agent workflow
 
 - `full_history`: add the entire agent message history
@@ -38,10 +36,7 @@ def _supports_disable_parallel_tool_calls(model: LanguageModelLike) -> bool:
     if not isinstance(model, BaseChatModel):
         return False
 
-    if (
-        hasattr(model, "model_name")
-        and model.model_name in MODELS_NO_PARALLEL_TOOL_CALLS
-    ):
+    if hasattr(model, "model_name") and model.model_name in MODELS_NO_PARALLEL_TOOL_CALLS:
         return False
 
     if not hasattr(model, "bind_tools"):
@@ -82,35 +77,6 @@ def _make_call_agent(
             pass
         elif output_mode == "last_message":
             messages = messages[-1:]
-        elif output_mode == "only_history":
-            to_drop = []
-            for m in messages[:]:
-                if (
-                    isinstance(m, ToolMessage)
-                    and m.response_metadata
-                    and (
-                        m.response_metadata.get(METADATA_KEY_HANDOFF_DESTINATION)
-                        or m.response_metadata.get(METADATA_KEY_IS_HANDOFF_BACK)
-                    )
-                ):
-                    1 / 0
-                    messages.append(RemoveMessage(id=m.id))
-                    to_drop.append(m.tool_call_id)
-            if to_drop:
-                messages_ = []
-                for m in messages[:]:
-                    if isinstance(m, AIMessage) and m.tool_calls:
-                        tool_calls = [c for c in m.tool_calls if c["id"] not in to_drop]
-                        if not tool_calls:
-                            # Just drop the entire message if it has no tool calls left
-                            messages.append(RemoveMessage(id=m.id))
-                        else:
-                            messages_.append(
-                                m.model_copy(update={"tool_calls": tool_calls})
-                            )
-                    else:
-                        messages_.append(m)
-                messages = messages_
 
         else:
             raise ValueError(
@@ -167,7 +133,9 @@ def create_supervisor(
     state_schema: StateSchemaType = AgentState,
     config_schema: Type[Any] | None = None,
     output_mode: OutputMode = "last_message",
-    add_handoff_back_messages: bool = True,
+    add_handoff_back_messages: Optional[bool] = None,
+    handoff_prefix: str = "transfer_to_",
+    omit_handoffs: bool = False,
     supervisor_name: str = "supervisor",
     include_agent_name: AgentNameMode | None = None,
 ) -> StateGraph:
@@ -215,11 +183,9 @@ def create_supervisor(
         output_mode: Mode for adding managed agents' outputs to the message history in the multi-agent workflow.
             Can be one of:
             - `full_history`: add the entire agent message history
-            - `only_history`: add the message history WITHOUT the supervisor's AI message and handoff messages.
             - `last_message`: add only the last message (default)
         add_handoff_back_messages: Whether to add a pair of (AIMessage, ToolMessage) to the message history
             when returning control to the supervisor to indicate that a handoff has occurred.
-            Not recommended if output_mode = only_history.
         supervisor_name: Name of the supervisor node.
         include_agent_name: Use to specify how to expose the agent name to the underlying supervisor LLM.
 
@@ -227,6 +193,8 @@ def create_supervisor(
             - "inline": Add the agent name directly into the content field of the AI message using XML-style tags.
                 Example: "How can I help you" -> "<name>agent_name</name><content>How can I help you?</content>"
     """
+    if add_handoff_back_messages is None:
+        add_handoff_back_messages = not omit_handoffs
     agent_names = set()
     for agent in agents:
         if agent.name is None or agent.name == "LangGraph":
@@ -254,7 +222,12 @@ def create_supervisor(
         all_tools = tools or []
     else:
         handoff_destinations = [
-            create_handoff_tool(agent_name=agent.name) for agent in agents
+            create_handoff_tool(
+                agent_name=agent.name,
+                prefix=handoff_prefix,
+                omit_handoffs=omit_handoffs,
+            )
+            for agent in agents
         ]
         all_tools = (tools or []) + handoff_destinations
 
@@ -284,8 +257,8 @@ def create_supervisor(
             _make_call_agent(
                 agent,
                 output_mode,
-                add_handoff_back_messages,
-                supervisor_name,
+                add_handoff_back_messages=add_handoff_back_messages,
+                supervisor_name=supervisor_name,
             ),
         )
         builder.add_edge(agent.name, supervisor_agent.name)

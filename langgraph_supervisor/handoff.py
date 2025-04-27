@@ -46,52 +46,14 @@ def _remove_non_handoff_tool_calls(
     )
     return last_ai_message
 
-# def create_handoff_tool(*, agent_name: str, prefix: str = "transfer_to_") -> BaseTool:
-#     """Create a tool that can handoff control to the requested agent.
-
-#     Args:
-#         agent_name: The name of the agent to handoff control to, i.e.
-#             the name of the agent node in the multi-agent graph.
-#             Agent names should be simple, clear and unique, preferably in snake_case,
-#             although you are only limited to the names accepted by LangGraph
-#             nodes as well as the tool names accepted by LLM providers
-#             (the tool name will look like this: `transfer_to_<agent_name>`).
-#     """
-#     tool_name = f"{prefix}{_normalize_agent_name(agent_name)}"
-#     desc = f"""Delegate work to {agent_name} and use their response to inform your next action. \
-# {agent_name} can take actions or retrieve knowledge relevant to their domain but cannot interface with the user.
-# When
-# """
-
-#     @tool(tool_name, description=desc)
-#     def handoff_to_agent(
-#         # instructions: str,
-#         state: Annotated[dict, InjectedState],
-#         tool_call_id: Annotated[str, InjectedToolCallId],
-#     ):
-
-#         tool_message = ToolMessage(
-#             content=f"Successfully delegated to {agent_name}",
-#             name=tool_name,
-#             tool_call_id=tool_call_id,
-#         )
-#         handoff_messages = _remove_non_handoff_tool_calls(
-#             state["messages"], tool_name, tool_call_id
-#         ) + [tool_message]
-#         return Command(
-#             graph=Command.PARENT,
-#             # NOTE: we are using Send here to allow the ToolNode in langgraph.prebuilt
-#             # to handle parallel handoffs by combining all Send commands into a single command
-#             goto=[Send(agent_name, {"messages": handoff_messages[:-2]})],
-#             # we also propagate the update to make sure the handoff messages are applied
-#             # to the parent graph's state
-#             update={"messages": handoff_messages[:-2]},
-#         )
-
-#     return handoff_to_agent
 
 def create_handoff_tool(
-    *, agent_name: str, name: str | None = None, description: str | None = None, prefix: str = "transfer_to_"
+    *,
+    agent_name: str,
+    name: str | None = None,
+    description: str | None = None,
+    prefix: str = "transfer_to_",
+    omit_handoffs: bool = False,
 ) -> BaseTool:
     """Create a tool that can handoff control to the requested agent.
 
@@ -127,10 +89,14 @@ def create_handoff_tool(
         last_ai_message = cast(AIMessage, state["messages"][-1])
         # Handle parallel handoffs
         if len(last_ai_message.tool_calls) > 1:
-            handoff_messages = state["messages"][:-1] + [
-                _remove_non_handoff_tool_calls(last_ai_message, tool_call_id),
-                tool_message,
-            ]
+            handoff_messages = state["messages"][:-1]
+            if not omit_handoffs:
+                handoff_messages.extend(
+                    (
+                        _remove_non_handoff_tool_calls(last_ai_message, tool_call_id),
+                        tool_message,
+                    )
+                )
             return Command(
                 graph=Command.PARENT,
                 # NOTE: we are using Send here to allow the ToolNode in langgraph.prebuilt
@@ -139,7 +105,10 @@ def create_handoff_tool(
             )
         # Handle single handoff
         else:
-            handoff_messages = state["messages"] + [tool_message]
+            if omit_handoffs:
+                handoff_messages = state["messages"][:-1]
+            else:
+                handoff_messages = state["messages"] + [tool_message]
             return Command(
                 goto=agent_name,
                 graph=Command.PARENT,
