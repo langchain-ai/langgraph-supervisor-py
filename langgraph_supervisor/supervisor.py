@@ -54,18 +54,6 @@ def _make_call_agent(
     add_handoff_back_messages: bool,
     supervisor_name: str,
 ) -> Callable[[dict], dict] | RunnableCallable:
-    """Wrap the supervisor agent to modify the state to be passed to the worker/sub-agent.
-
-    Args:
-        agent: The Pregel agent to wrap (i.e., the supervisor agent).
-        output_mode: Determines how much of the agent's message history to include.
-        add_handoff_back_messages: Whether to add handoff-back messages when returning control to the supervisor.
-        supervisor_name: Name of the supervisor node.
-    Returns:
-        Callable or RunnableCallable that invokes the agent and processes its output.
-    Raises:
-        ValueError: If output_mode is invalid.
-    """
     if output_mode not in OutputMode.__args__:
         raise ValueError(
             f"Invalid agent output mode: {output_mode}. Needs to be one of {OutputMode.__args__}"
