@@ -124,6 +124,7 @@ def create_supervisor(
         model: Language model to use for the supervisor
         tools: Tools to use for the supervisor
         prompt: Optional prompt to use for the supervisor. Can be one of:
+
             - str: This is converted to a SystemMessage and added to the beginning of the list of messages in state["messages"].
             - SystemMessage: this is added to the beginning of the list of messages in state["messages"].
             - Callable: This function should take in full graph state and the output is then passed to the language model.
@@ -157,9 +158,10 @@ def create_supervisor(
                 To control parallel tool calling for other providers, add explicit instructions for tool use to the system prompt.
         state_schema: State schema to use for the supervisor graph.
         config_schema: An optional schema for configuration.
-            Use this to expose configurable parameters via supervisor.config_specs.
+            Use this to expose configurable parameters via `supervisor.config_specs`.
         output_mode: Mode for adding managed agents' outputs to the message history in the multi-agent workflow.
             Can be one of:
+
             - `full_history`: add the entire agent message history
             - `last_message`: add only the last message (default)
         add_handoff_back_messages: Whether to add a pair of (AIMessage, ToolMessage) to the message history
@@ -168,8 +170,8 @@ def create_supervisor(
         include_agent_name: Use to specify how to expose the agent name to the underlying supervisor LLM.
 
             - None: Relies on the LLM provider using the name attribute on the AI message. Currently, only OpenAI supports this.
-            - "inline": Add the agent name directly into the content field of the AI message using XML-style tags.
-                Example: "How can I help you" -> "<name>agent_name</name><content>How can I help you?</content>"
+            - `"inline"`: Add the agent name directly into the content field of the AI message using XML-style tags.
+                Example: `"How can I help you"` -> `"<name>agent_name</name><content>How can I help you?</content>"`
     """
     agent_names = set()
     for agent in agents:
