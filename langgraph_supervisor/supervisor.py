@@ -1,14 +1,16 @@
 import inspect
-from typing import Any, Callable, Literal, Optional, Type, Union
+from typing import Any, Callable, Literal, Optional, Type, Union, cast
 
 from langchain_core.language_models import BaseChatModel, LanguageModelLike
 from langchain_core.tools import BaseTool
 from langgraph.graph import END, START, StateGraph
+from langgraph.prebuilt import ToolNode
 from langgraph.prebuilt.chat_agent_executor import (
     AgentState,
     Prompt,
     StateSchemaType,
     StructuredResponseSchema,
+    _should_bind_tools,
     create_react_agent,
 )
 from langgraph.pregel import Pregel
@@ -104,7 +106,7 @@ def create_supervisor(
     agents: list[Pregel],
     *,
     model: LanguageModelLike,
-    tools: list[BaseTool | Callable] | None = None,
+    tools: list[BaseTool | Callable] | ToolNode | None = None,
     prompt: Prompt | None = None,
     response_format: Optional[
         Union[StructuredResponseSchema, tuple[str, StructuredResponseSchema]]
@@ -186,7 +188,18 @@ def create_supervisor(
 
         agent_names.add(agent.name)
 
-    handoff_destinations = _get_handoff_destinations(tools or [])
+    if isinstance(tools, ToolNode):
+        tool_classes = list(tools.tools_by_name.values())
+        tool_node = tools
+    elif tools:
+        tool_node = ToolNode(tools)
+        # get the tool functions wrapped in a tool class from the ToolNode
+        tool_classes = list(tool_node.tools_by_name.values())
+    else:
+        tool_node = None
+        tool_classes = []
+
+    handoff_destinations = _get_handoff_destinations(tool_classes)
     if handoff_destinations:
         if missing_handoff_destinations := set(agent_names) - set(handoff_destinations):
             raise ValueError(
@@ -195,15 +208,20 @@ def create_supervisor(
             )
 
         # Handoff tools should be already provided here
-        all_tools = tools or []
+        all_tools = tool_classes
     else:
         handoff_destinations = [create_handoff_tool(agent_name=agent.name) for agent in agents]
-        all_tools = (tools or []) + handoff_destinations
+        all_tools = tool_classes + handoff_destinations
 
-    if _supports_disable_parallel_tool_calls(model):
-        model = model.bind_tools(all_tools, parallel_tool_calls=parallel_tool_calls)
-    else:
-        model = model.bind_tools(all_tools)
+    tool_calling_enabled = len(tool_classes) > 0
+
+    if _should_bind_tools(model, tool_classes) and tool_calling_enabled:
+        if _supports_disable_parallel_tool_calls(model):
+            model = cast(BaseChatModel, model).bind_tools(
+                all_tools, parallel_tool_calls=parallel_tool_calls
+            )
+        else:
+            model = cast(BaseChatModel, model).bind_tools(all_tools)
 
     if include_agent_name:
         model = with_agent_name(model, include_agent_name)
@@ -211,7 +229,7 @@ def create_supervisor(
     supervisor_agent = create_react_agent(
         name=supervisor_name,
         model=model,
-        tools=all_tools,
+        tools=tool_node if tool_node else tool_classes,
         prompt=prompt,
         state_schema=state_schema,
         response_format=response_format,
