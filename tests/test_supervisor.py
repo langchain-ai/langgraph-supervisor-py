@@ -12,6 +12,7 @@ from langgraph.prebuilt import create_react_agent
 
 from langgraph_supervisor import create_supervisor
 from langgraph_supervisor.agent_name import AgentNameMode, with_agent_name
+from langgraph_supervisor.handoff import create_forward_message_tool
 
 
 class FakeChatModel(BaseChatModel):
@@ -459,10 +460,11 @@ def test_supervisor_message_forwarding():
         ),
     ]
 
+    forwarding = create_forward_message_tool("supervisor")
     workflow = create_supervisor(
         [echo_agent],
         model=FakeChatModel(responses=supervisor_messages),
-        enable_forwarding=True,
+        tools=[forwarding],
     )
     app = workflow.compile()
 

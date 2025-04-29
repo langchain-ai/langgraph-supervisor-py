@@ -264,6 +264,26 @@ def create_custom_handoff_tool(*, agent_name: str, name: str | None, description
     return handoff_to_agent
 ```
 
+### Message Forwarding
+
+You can equip the supervisor with a tool to directly forward the last message received from a worker agent straight to the final output of the graph using `create_forward_message_tool`. This is useful when the supervisor determines that the worker's response is sufficient and doesn't require further processing or summarization by the supervisor itself. It saves tokens for the supervisor and avoids potential misrepresentation of the worker's response through paraphrasing.
+
+```python
+from langgraph_supervisor.handoff import create_forward_message_tool
+
+# Assume research_agent and math_agent are defined as before
+
+forwarding_tool = create_forward_message_tool("supervisor") # The argument is the name to assign to the resulting forwarded message
+workflow = create_supervisor(
+    [research_agent, math_agent],
+    model=model,
+    # Pass the forwarding tool along with any other custom or default handoff tools
+    tools=[forwarding_tool]
+)
+```
+
+This creates a tool named `forward_message` that the supervisor can invoke. The tool expects an argument `from_agent` specifying which agent's last message should be forwarded directly to the output.
+
 ## Using Functional API 
 
 Here's a simple example of a supervisor managing two specialized agentic workflows created using Functional API:

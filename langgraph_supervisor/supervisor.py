@@ -18,7 +18,6 @@ from langgraph_supervisor.agent_name import AgentNameMode, with_agent_name
 from langgraph_supervisor.handoff import (
     METADATA_KEY_HANDOFF_DESTINATION,
     _normalize_agent_name,
-    create_forward_message_tool,
     create_handoff_back_messages,
     create_handoff_tool,
 )
@@ -127,7 +126,6 @@ def create_supervisor(
     add_handoff_back_messages: Optional[bool] = None,
     supervisor_name: str = "supervisor",
     include_agent_name: AgentNameMode | None = None,
-    enable_forwarding: bool = False,
 ) -> StateGraph:
     """Create a multi-agent supervisor.
 
@@ -189,9 +187,6 @@ def create_supervisor(
             - None: Relies on the LLM provider using the name attribute on the AI message. Currently, only OpenAI supports this.
             - "inline": Add the agent name directly into the content field of the AI message using XML-style tags.
                 Example: "How can I help you" -> "<name>agent_name</name><content>How can I help you?</content>"
-        enable_forwarding: Whether to add a forward_message tool to the supervisor.
-            This permits the supervisor to forward the latest message from a specific agent to the user.
-            Recommended that you set "add_handoff_back_messages" to False when using this option.
     """
     if add_handoff_back_messages is None:
         add_handoff_back_messages = add_handoff_messages
@@ -234,9 +229,6 @@ def create_supervisor(
             for agent in agents
         ]
         all_tools = (tools or []) + handoff_destinations
-
-    if enable_forwarding:
-        all_tools.append(create_forward_message_tool(supervisor_name))
 
     if _supports_disable_parallel_tool_calls(model):
         model = model.bind_tools(all_tools, parallel_tool_calls=parallel_tool_calls)
