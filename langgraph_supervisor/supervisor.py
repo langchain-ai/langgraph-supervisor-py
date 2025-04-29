@@ -17,6 +17,7 @@ from langgraph.utils.runnable import RunnableCallable
 from langgraph_supervisor.agent_name import AgentNameMode, with_agent_name
 from langgraph_supervisor.handoff import (
     METADATA_KEY_HANDOFF_DESTINATION,
+    _normalize_agent_name,
     create_handoff_back_messages,
     create_handoff_tool,
 )
@@ -65,6 +66,7 @@ def _make_call_agent(
             pass
         elif output_mode == "last_message":
             messages = messages[-1:]
+
         else:
             raise ValueError(
                 f"Invalid agent output mode: {output_mode}. "
@@ -91,6 +93,12 @@ def _make_call_agent(
 
 
 def _get_handoff_destinations(tools: list[BaseTool | Callable]) -> list[str]:
+    """Extract handoff destinations from provided tools.
+    Args:
+        tools: List of tools to inspect.
+    Returns:
+        List of agent names that are handoff destinations.
+    """
     return [
         tool.metadata[METADATA_KEY_HANDOFF_DESTINATION]
         for tool in tools
@@ -113,7 +121,9 @@ def create_supervisor(
     state_schema: StateSchemaType = AgentState,
     config_schema: Type[Any] | None = None,
     output_mode: OutputMode = "last_message",
-    add_handoff_back_messages: bool = True,
+    add_handoff_messages: bool = True,
+    handoff_tool_prefix: Optional[str] = None,
+    add_handoff_back_messages: Optional[bool] = None,
     supervisor_name: str = "supervisor",
     include_agent_name: AgentNameMode | None = None,
 ) -> StateGraph:
@@ -167,6 +177,11 @@ def create_supervisor(
 
             - `full_history`: add the entire agent message history
             - `last_message`: add only the last message (default)
+        add_handoff_messages: Whether to add a pair of (AIMessage, ToolMessage) to the message history
+            when a handoff occurs.
+        handoff_tool_prefix: Optional prefix for the handoff tools (e.g., "delegate_to_" or "transfer_to_")
+            If provided, the handoff tools will be named `handoff_tool_prefix_agent_name`.
+            If not provided, the handoff tools will be named `transfer_to_agent_name`.
         add_handoff_back_messages: Whether to add a pair of (AIMessage, ToolMessage) to the message history
             when returning control to the supervisor to indicate that a handoff has occurred.
         supervisor_name: Name of the supervisor node.
@@ -224,6 +239,8 @@ def create_supervisor(
     })
     ```
     """
+    if add_handoff_back_messages is None:
+        add_handoff_back_messages = add_handoff_messages
     agent_names = set()
     for agent in agents:
         if agent.name is None or agent.name == "LangGraph":
@@ -250,7 +267,18 @@ def create_supervisor(
         # Handoff tools should be already provided here
         all_tools = tools or []
     else:
-        handoff_destinations = [create_handoff_tool(agent_name=agent.name) for agent in agents]
+        handoff_destinations = [
+            create_handoff_tool(
+                agent_name=agent.name,
+                name=(
+                    None
+                    if handoff_tool_prefix is None
+                    else f"{handoff_tool_prefix}{_normalize_agent_name(agent.name)}"
+                ),
+                add_handoff_messages=add_handoff_messages,
+            )
+            for agent in agents
+        ]
         all_tools = (tools or []) + handoff_destinations
 
     if _supports_disable_parallel_tool_calls(model):
@@ -279,8 +307,8 @@ def create_supervisor(
             _make_call_agent(
                 agent,
                 output_mode,
-                add_handoff_back_messages,
-                supervisor_name,
+                add_handoff_back_messages=add_handoff_back_messages,
+                supervisor_name=supervisor_name,
             ),
         )
         builder.add_edge(agent.name, supervisor_agent.name)
