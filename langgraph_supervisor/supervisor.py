@@ -120,7 +120,10 @@ def create_supervisor(
     """Create a multi-agent supervisor.
 
     Args:
-        agents: List of agents to manage
+        agents: List of agents to manage.
+            An agent can be a LangGraph [CompiledStateGraph](https://langchain-ai.github.io/langgraph/reference/graphs/#langgraph.graph.state.CompiledStateGraph),
+            a functional API [workflow](https://langchain-ai.github.io/langgraph/reference/func/#langgraph.func.entrypoint),
+            or any other [Pregel](https://langchain-ai.github.io/langgraph/reference/pregel/#langgraph.pregel.Pregel) object.
         model: Language model to use for the supervisor
         tools: Tools to use for the supervisor
         prompt: Optional prompt to use for the supervisor. Can be one of:
@@ -172,6 +175,54 @@ def create_supervisor(
             - None: Relies on the LLM provider using the name attribute on the AI message. Currently, only OpenAI supports this.
             - `"inline"`: Add the agent name directly into the content field of the AI message using XML-style tags.
                 Example: `"How can I help you"` -> `"<name>agent_name</name><content>How can I help you?</content>"`
+
+    Example:
+
+    ```python
+    from langchain_openai import ChatOpenAI
+
+    from langgraph_supervisor import create_supervisor
+    from langgraph.prebuilt import create_react_agent
+
+    # Create specialized agents
+
+    def add(a: float, b: float) -> float:
+        '''Add two numbers.'''
+        return a + b
+
+    def web_search(query: str) -> str:
+        '''Search the web for information.'''
+        return 'Here are the headcounts for each of the FAANG companies in 2024...'
+
+    math_agent = create_react_agent(
+        model="openai:gpt-4o",
+        tools=[add],
+        name="math_expert",
+    )
+
+    research_agent = create_react_agent(
+        model="openai:gpt-4o",
+        tools=[web_search],
+        name="research_expert",
+    )
+
+    # Create supervisor workflow
+    workflow = create_supervisor(
+        [research_agent, math_agent],
+        model=ChatOpenAI(model="gpt-4o"),
+    )
+
+    # Compile and run
+    app = workflow.compile()
+    result = app.invoke({
+        "messages": [
+            {
+                "role": "user",
+                "content": "what's the combined headcount of the FAANG companies in 2024?"
+            }
+        ]
+    })
+    ```
     """
     agent_names = set()
     for agent in agents:
