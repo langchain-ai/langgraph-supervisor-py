@@ -17,6 +17,7 @@ from langgraph.utils.runnable import RunnableCallable
 from langgraph_supervisor.agent_name import AgentNameMode, with_agent_name
 from langgraph_supervisor.handoff import (
     METADATA_KEY_HANDOFF_DESTINATION,
+    _normalize_agent_name,
     create_handoff_back_messages,
     create_handoff_tool,
 )
@@ -92,8 +93,7 @@ def _make_call_agent(
 
 
 def _get_handoff_destinations(tools: list[BaseTool | Callable]) -> list[str]:
-    """
-    Extract handoff destinations from provided tools.
+    """Extract handoff destinations from provided tools.
     Args:
         tools: List of tools to inspect.
     Returns:
@@ -121,9 +121,9 @@ def create_supervisor(
     state_schema: StateSchemaType = AgentState,
     config_schema: Type[Any] | None = None,
     output_mode: OutputMode = "last_message",
+    add_handoff_messages: bool = True,
+    handoff_prefix_name: Optional[str] = None,
     add_handoff_back_messages: Optional[bool] = None,
-    handoff_prefix: str = "transfer_to_",
-    omit_handoffs: bool = False,
     supervisor_name: str = "supervisor",
     include_agent_name: AgentNameMode | None = None,
 ) -> StateGraph:
@@ -174,6 +174,11 @@ def create_supervisor(
             - `last_message`: add only the last message (default)
         add_handoff_back_messages: Whether to add a pair of (AIMessage, ToolMessage) to the message history
             when returning control to the supervisor to indicate that a handoff has occurred.
+        add_handoff_messages: Whether to add a pair of (AIMessage, ToolMessage) to the message history
+            when a handoff occurs.
+        handoff_prefix_name: Optional prefix for the handoff tools (e.g., "delegate_to_" or "transfer_to_")
+            If provided, the handoff tools will be named `handoff_prefix_name_agent_name`.
+            If not provided, the handoff tools will be named `transfer_to_agent_name`.
         supervisor_name: Name of the supervisor node.
         include_agent_name: Use to specify how to expose the agent name to the underlying supervisor LLM.
 
@@ -182,7 +187,7 @@ def create_supervisor(
                 Example: "How can I help you" -> "<name>agent_name</name><content>How can I help you?</content>"
     """
     if add_handoff_back_messages is None:
-        add_handoff_back_messages = not omit_handoffs
+        add_handoff_back_messages = add_handoff_messages
     agent_names = set()
     for agent in agents:
         if agent.name is None or agent.name == "LangGraph":
@@ -212,8 +217,12 @@ def create_supervisor(
         handoff_destinations = [
             create_handoff_tool(
                 agent_name=agent.name,
-                prefix=handoff_prefix,
-                omit_handoffs=omit_handoffs,
+                name=(
+                    None
+                    if handoff_prefix_name is None
+                    else f"{handoff_prefix_name}{_normalize_agent_name(agent.name)}"
+                ),
+                add_handoff_messages=add_handoff_messages,
             )
             for agent in agents
         ]

@@ -349,7 +349,7 @@ def test_worker_hide_handoffs():
         ],
     ]
 
-    class Assertion:
+    class Expectations:
         def __init__(self, expected: list[dict]):
             self.expected = expected.copy()
 
@@ -363,7 +363,7 @@ def test_worker_hide_handoffs():
             AIMessage(content="Echo 1!"),
             AIMessage(content="Echo 2!"),
         ],
-        assertion=Assertion(expectations),
+        assertion=Expectations(expectations),
     )
     echo_agent = create_react_agent(
         model=echo_model.bind_tools([echo_tool]),
@@ -405,7 +405,7 @@ def test_worker_hide_handoffs():
     workflow = create_supervisor(
         [echo_agent],
         model=FakeChatModel(responses=supervisor_messages),
-        omit_handoffs=True,
+        add_handoff_messages=False,
     )
     app = workflow.compile()
 

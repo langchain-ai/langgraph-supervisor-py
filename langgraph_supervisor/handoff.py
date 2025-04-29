@@ -52,8 +52,7 @@ def create_handoff_tool(
     agent_name: str,
     name: str | None = None,
     description: str | None = None,
-    prefix: str = "transfer_to_",
-    omit_handoffs: bool = False,
+    add_handoff_messages: bool = True,
 ) -> BaseTool:
     """Create a tool that can handoff control to the requested agent.
 
@@ -68,9 +67,11 @@ def create_handoff_tool(
             If not provided, the tool name will be `transfer_to_<agent_name>`.
         description: Optional description for the handoff tool.
             If not provided, the description will be `Ask agent <agent_name> for help`.
+        add_handoff_messages: Whether to add handoff messages to the message history.
+            If False, the handoff messages will be omitted from the message history.
     """
     if name is None:
-        name = f"{prefix}{_normalize_agent_name(agent_name)}"
+        name = f"transfer_to_{_normalize_agent_name(agent_name)}"
 
     if description is None:
         description = f"Ask agent '{agent_name}' for help"
@@ -90,7 +91,7 @@ def create_handoff_tool(
         # Handle parallel handoffs
         if len(last_ai_message.tool_calls) > 1:
             handoff_messages = state["messages"][:-1]
-            if not omit_handoffs:
+            if add_handoff_messages:
                 handoff_messages.extend(
                     (
                         _remove_non_handoff_tool_calls(last_ai_message, tool_call_id),
@@ -105,10 +106,10 @@ def create_handoff_tool(
             )
         # Handle single handoff
         else:
-            if omit_handoffs:
-                handoff_messages = state["messages"][:-1]
-            else:
+            if add_handoff_messages:
                 handoff_messages = state["messages"] + [tool_message]
+            else:
+                handoff_messages = state["messages"][:-1]
             return Command(
                 goto=agent_name,
                 graph=Command.PARENT,
