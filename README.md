@@ -99,7 +99,7 @@ result = app.invoke({
 
 ## Message History Management
 
-You can control how agent messages are added to the overall conversation history of the multi-agent system:
+You can control how messages from worker agents are added to the overall conversation history of the multi-agent system:
 
 Include full message history from an agent:
 
@@ -197,6 +197,27 @@ workflow = create_supervisor(
     ],
     model=model,
 )
+```
+
+You can also control whether the handoff tool invocation messages are added to the state. By default, they are added (`add_handoff_messages=True`), but you can disable this if you want a more concise history:
+
+```python
+workflow = create_supervisor(
+    [research_agent, math_agent],
+    model=model,
+    add_handoff_messages=False
+)
+```
+
+Additionally, you can customize the prefix used for the automatically generated handoff tools:
+
+```python
+workflow = create_supervisor(
+    [research_agent, math_agent],
+    model=model,
+    handoff_tool_prefix="delegate_to"
+)
+# This will create tools named: delegate_to_research_expert, delegate_to_math_expert
 ```
 
 Here is an example of what a custom handoff tool might look like:

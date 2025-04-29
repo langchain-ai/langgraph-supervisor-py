@@ -122,7 +122,7 @@ def create_supervisor(
     config_schema: Type[Any] | None = None,
     output_mode: OutputMode = "last_message",
     add_handoff_messages: bool = True,
-    handoff_prefix_name: Optional[str] = None,
+    handoff_tool_prefix: Optional[str] = None,
     add_handoff_back_messages: Optional[bool] = None,
     supervisor_name: str = "supervisor",
     include_agent_name: AgentNameMode | None = None,
@@ -172,13 +172,13 @@ def create_supervisor(
             Can be one of:
             - `full_history`: add the entire agent message history
             - `last_message`: add only the last message (default)
-        add_handoff_back_messages: Whether to add a pair of (AIMessage, ToolMessage) to the message history
-            when returning control to the supervisor to indicate that a handoff has occurred.
         add_handoff_messages: Whether to add a pair of (AIMessage, ToolMessage) to the message history
             when a handoff occurs.
-        handoff_prefix_name: Optional prefix for the handoff tools (e.g., "delegate_to_" or "transfer_to_")
-            If provided, the handoff tools will be named `handoff_prefix_name_agent_name`.
+        handoff_tool_prefix: Optional prefix for the handoff tools (e.g., "delegate_to_" or "transfer_to_")
+            If provided, the handoff tools will be named `handoff_tool_prefix_agent_name`.
             If not provided, the handoff tools will be named `transfer_to_agent_name`.
+        add_handoff_back_messages: Whether to add a pair of (AIMessage, ToolMessage) to the message history
+            when returning control to the supervisor to indicate that a handoff has occurred.
         supervisor_name: Name of the supervisor node.
         include_agent_name: Use to specify how to expose the agent name to the underlying supervisor LLM.
 
@@ -219,8 +219,8 @@ def create_supervisor(
                 agent_name=agent.name,
                 name=(
                     None
-                    if handoff_prefix_name is None
-                    else f"{handoff_prefix_name}{_normalize_agent_name(agent.name)}"
+                    if handoff_tool_prefix is None
+                    else f"{handoff_tool_prefix}{_normalize_agent_name(agent.name)}"
                 ),
                 add_handoff_messages=add_handoff_messages,
             )

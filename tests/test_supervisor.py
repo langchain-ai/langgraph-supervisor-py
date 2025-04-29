@@ -291,6 +291,34 @@ class FakeChatModelWithAssertion(FakeChatModel):
         return super()._generate(messages, stop, run_manager, **kwargs)
 
 
+def get_tool_calls(msg):
+    tool_calls = getattr(msg, "tool_calls", None)
+    if tool_calls is None:
+        return None
+    return [
+        {"name": tc["name"], "args": tc["args"]} for tc in tool_calls if tc["type"] == "tool_call"
+    ]
+
+
+def as_dict(msg):
+    return {
+        "name": msg.name,
+        "content": msg.content,
+        "tool_calls": get_tool_calls(msg),
+        "type": msg.type,
+    }
+
+
+class Expectations:
+    def __init__(self, expected: list[dict]):
+        self.expected = expected.copy()
+
+    def __call__(self, messages: list[BaseMessage]):
+        expected = self.expected.pop(0)
+        received = [as_dict(m) for m in messages]
+        assert expected == received
+
+
 def test_worker_hide_handoffs():
     """Test that the supervisor forwards a message to a specific agent and receives the correct response."""
 
@@ -298,24 +326,6 @@ def test_worker_hide_handoffs():
     def echo_tool(text: str) -> str:
         """Echo the input text."""
         return text
-
-    def get_tool_calls(msg):
-        tool_calls = getattr(msg, "tool_calls", None)
-        if tool_calls is None:
-            return None
-        return [
-            {"name": tc["name"], "args": tc["args"]}
-            for tc in tool_calls
-            if tc["type"] == "tool_call"
-        ]
-
-    def as_dict(msg):
-        return {
-            "name": msg.name,
-            "content": msg.content,
-            "tool_calls": get_tool_calls(msg),
-            "type": msg.type,
-        }
 
     expectations = [
         [
@@ -348,15 +358,6 @@ def test_worker_hide_handoffs():
             },
         ],
     ]
-
-    class Expectations:
-        def __init__(self, expected: list[dict]):
-            self.expected = expected.copy()
-
-        def __call__(self, messages: list[BaseMessage]):
-            expected = self.expected.pop(0)
-            received = [as_dict(m) for m in messages]
-            assert expected == received
 
     echo_model = FakeChatModelWithAssertion(
         responses=[
