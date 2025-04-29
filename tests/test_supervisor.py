@@ -1,6 +1,6 @@
 """Tests for the supervisor module."""
 
-from typing import Optional
+from typing import Callable, Optional
 
 import pytest
 from langchain_core.callbacks.manager import CallbackManagerForLLMRun
@@ -275,6 +275,143 @@ def test_supervisor_basic_workflow(
     assert result_full_history["messages"][17] == math_agent_messages[2]
     # final supervisor message
     assert result_full_history["messages"][-1] == supervisor_messages[-1]
+
+
+class FakeChatModelWithAssertion(FakeChatModel):
+    assertion: Callable[[list[BaseMessage]], None]
+
+    def _generate(
+        self,
+        messages: list[BaseMessage],
+        stop: Optional[list[str]] = None,
+        run_manager: Optional[CallbackManagerForLLMRun] = None,
+        **kwargs,
+    ) -> ChatResult:
+        self.assertion(messages)
+        return super()._generate(messages, stop, run_manager, **kwargs)
+
+
+def get_tool_calls(msg):
+    tool_calls = getattr(msg, "tool_calls", None)
+    if tool_calls is None:
+        return None
+    return [
+        {"name": tc["name"], "args": tc["args"]} for tc in tool_calls if tc["type"] == "tool_call"
+    ]
+
+
+def as_dict(msg):
+    return {
+        "name": msg.name,
+        "content": msg.content,
+        "tool_calls": get_tool_calls(msg),
+        "type": msg.type,
+    }
+
+
+class Expectations:
+    def __init__(self, expected: list[dict]):
+        self.expected = expected.copy()
+
+    def __call__(self, messages: list[BaseMessage]):
+        expected = self.expected.pop(0)
+        received = [as_dict(m) for m in messages]
+        assert expected == received
+
+
+def test_worker_hide_handoffs():
+    """Test that the supervisor forwards a message to a specific agent and receives the correct response."""
+
+    @tool
+    def echo_tool(text: str) -> str:
+        """Echo the input text."""
+        return text
+
+    expectations = [
+        [
+            {
+                "name": None,
+                "content": "Scooby-dooby-doo",
+                "tool_calls": None,
+                "type": "human",
+            }
+        ],
+        [
+            {
+                "name": None,
+                "content": "Scooby-dooby-doo",
+                "tool_calls": None,
+                "type": "human",
+            },
+            {
+                "name": "echo_agent",
+                "content": "Echo 1!",
+                "tool_calls": [],
+                "type": "ai",
+            },
+            {"name": "supervisor", "content": "boo", "tool_calls": [], "type": "ai"},
+            {
+                "name": None,
+                "content": "Huh take two?",
+                "tool_calls": None,
+                "type": "human",
+            },
+        ],
+    ]
+
+    echo_model = FakeChatModelWithAssertion(
+        responses=[
+            AIMessage(content="Echo 1!"),
+            AIMessage(content="Echo 2!"),
+        ],
+        assertion=Expectations(expectations),
+    )
+    echo_agent = create_react_agent(
+        model=echo_model.bind_tools([echo_tool]),
+        tools=[echo_tool],
+        name="echo_agent",
+    )
+
+    supervisor_messages = [
+        AIMessage(
+            content="",
+            tool_calls=[
+                {
+                    "name": "transfer_to_echo_agent",
+                    "args": {},
+                    "id": "call_gyQSgJQm5jJtPcF5ITe8GGGF",
+                    "type": "tool_call",
+                }
+            ],
+        ),
+        AIMessage(
+            content="boo",
+        ),
+        AIMessage(
+            content="",
+            tool_calls=[
+                {
+                    "name": "transfer_to_echo_agent",
+                    "args": {},
+                    "id": "call_gyQSgJQm5jJtPcF5ITe8GGGG",
+                    "type": "tool_call",
+                }
+            ],
+        ),
+        AIMessage(
+            content="END",
+        ),
+    ]
+
+    workflow = create_supervisor(
+        [echo_agent],
+        model=FakeChatModel(responses=supervisor_messages),
+        add_handoff_messages=False,
+    )
+    app = workflow.compile()
+
+    result = app.invoke({"messages": [HumanMessage(content="Scooby-dooby-doo")]})
+    app.invoke({"messages": result["messages"] + [HumanMessage(content="Huh take two?")]})
 
 
 def test_supervisor_message_forwarding():
