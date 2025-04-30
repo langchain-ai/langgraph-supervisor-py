@@ -1,4 +1,5 @@
 version = 1
+revision = 1
 requires-python = ">=3.10"
 resolution-markers = [
     "python_full_version >= '3.12.4'",
@@ -344,7 +345,7 @@ test = [
 [package.metadata]
 requires-dist = [
     { name = "langchain-core", specifier = ">=0.3.40,<0.4.0" },
-    { name = "langgraph", specifier = ">=0.3.5,<0.4.0" },
+    { name = "langgraph", specifier = ">=0.3.5,<0.5.0" },
     { name = "langgraph-prebuilt", specifier = ">=0.1.7,<0.2.0" },
 ]
 
