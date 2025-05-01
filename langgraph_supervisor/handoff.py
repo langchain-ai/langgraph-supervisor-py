@@ -1,6 +1,6 @@
 import re
 import uuid
-from typing import cast
+from typing import TypeGuard, cast
 
 from langchain_core.messages import AIMessage, ToolCall, ToolMessage
 from langchain_core.tools import BaseTool, InjectedToolCallId, tool
@@ -18,6 +18,11 @@ def _normalize_agent_name(agent_name: str) -> str:
     return WHITESPACE_RE.sub("_", agent_name.strip()).lower()
 
 
+def _has_multiple_content_blocks(content: str | list[str | dict]) -> TypeGuard[list[dict]]:
+    """Check if content contains multiple content blocks."""
+    return isinstance(content, list) and len(content) > 1 and isinstance(content[0], dict)
+
+
 def _remove_non_handoff_tool_calls(
     last_ai_message: AIMessage, handoff_tool_call_id: str
 ) -> AIMessage:
@@ -26,7 +31,7 @@ def _remove_non_handoff_tool_calls(
     # we need to remove tool calls that are not meant for this agent
     # to ensure that the resulting message history is valid
     content = last_ai_message.content
-    if isinstance(content, list) and len(content) > 1 and isinstance(content[0], dict):
+    if _has_multiple_content_blocks(content):
         content = [
             content_block
             for content_block in content
@@ -74,7 +79,7 @@ def create_handoff_tool(
     def handoff_to_agent(
         state: Annotated[dict, InjectedState],
         tool_call_id: Annotated[str, InjectedToolCallId],
-    ):
+    ) -> Command:
         tool_message = ToolMessage(
             content=f"Successfully transferred to {agent_name}",
             name=name,

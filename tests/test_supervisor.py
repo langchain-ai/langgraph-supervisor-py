@@ -1,12 +1,14 @@
 """Tests for the supervisor module."""
 
-from typing import Optional
+from collections.abc import Callable, Sequence
+from typing import Any, Optional, cast
 
 import pytest
 from langchain_core.callbacks.manager import CallbackManagerForLLMRun
-from langchain_core.language_models.chat_models import BaseChatModel
+from langchain_core.language_models.chat_models import BaseChatModel, LanguageModelInput
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
 from langchain_core.outputs import ChatGeneration, ChatResult
+from langchain_core.runnables import Runnable
 from langchain_core.tools import BaseTool, tool
 from langgraph.prebuilt import create_react_agent
 
@@ -16,7 +18,7 @@ from langgraph_supervisor.agent_name import AgentNameMode, with_agent_name
 
 class FakeChatModel(BaseChatModel):
     idx: int = 0
-    responses: list[BaseMessage]
+    responses: Sequence[BaseMessage]
 
     @property
     def _llm_type(self) -> str:
@@ -27,16 +29,18 @@ class FakeChatModel(BaseChatModel):
         messages: list[BaseMessage],
         stop: Optional[list[str]] = None,
         run_manager: Optional[CallbackManagerForLLMRun] = None,
-        **kwargs,
+        **kwargs: Any,
     ) -> ChatResult:
         generation = ChatGeneration(message=self.responses[self.idx])
         self.idx += 1
         return ChatResult(generations=[generation])
 
-    def bind_tools(self, tools: list[BaseTool]) -> "FakeChatModel":
+    def bind_tools(
+        self, tools: Sequence[dict[str, Any] | type | Callable | BaseTool], **kwargs: Any
+    ) -> Runnable[LanguageModelInput, BaseMessage]:
         tool_dicts = [
             {
-                "name": tool.name,
+                "name": tool.name if isinstance(tool, BaseTool) else str(tool),
             }
             for tool in tools
         ]
@@ -181,7 +185,9 @@ def test_supervisor_basic_workflow(
 
     math_model = FakeChatModel(responses=math_agent_messages)
     if include_individual_agent_name:
-        math_model = with_agent_name(math_model.bind_tools([add]), include_individual_agent_name)
+        math_model = cast(FakeChatModel, with_agent_name(
+            math_model.bind_tools([add]), include_individual_agent_name
+        ))
 
     math_agent = create_react_agent(
         model=math_model,
@@ -191,9 +197,9 @@ def test_supervisor_basic_workflow(
 
     research_model = FakeChatModel(responses=research_agent_messages)
     if include_individual_agent_name:
-        research_model = with_agent_name(
+        research_model = cast(FakeChatModel, with_agent_name(
             research_model.bind_tools([web_search]), include_individual_agent_name
-        )
+        ))
 
     research_agent = create_react_agent(
         model=research_model,
