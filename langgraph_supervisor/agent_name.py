@@ -63,9 +63,8 @@ def remove_inline_agent_name(message: BaseMessage) -> BaseMessage:
     if not isinstance(message, AIMessage) or not message.content:
         return message
 
-    is_content_blocks_content = _is_content_blocks_content(message.content)
-    if is_content_blocks_content:
-        content_blocks_content = cast(list[dict], message.content)
+    if is_content_blocks_content := _is_content_blocks_content(message.content):
+        content_blocks_content = message.content
         text_blocks = [block for block in content_blocks_content if block["type"] == "text"]
         if not text_blocks:
             return message

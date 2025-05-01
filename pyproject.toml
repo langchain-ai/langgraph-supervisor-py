@@ -4,15 +4,17 @@ build-backend = "pdm.backend"
 
 [project]
 name = "langgraph-supervisor"
-version = "0.0.17"
+version = "0.0.19"
 description = "An implementation of a supervisor multi-agent architecture using LangGraph"
 authors = [
     {name = "Vadym Barda", email = "19161700+vbarda@users.noreply.github.com "}
 ]
+license = "MIT"
+license-files = ["LICENSE"]
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
-    "langgraph>=0.3.5,<0.4.0",
+    "langgraph>=0.3.5",
     "langgraph-prebuilt>=0.1.7,<0.2.0",
     "langchain-core>=0.3.40,<0.4.0"
 ]

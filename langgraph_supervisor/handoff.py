@@ -53,7 +53,11 @@ def _remove_non_handoff_tool_calls(
 
 
 def create_handoff_tool(
-    *, agent_name: str, name: str | None = None, description: str | None = None
+    *,
+    agent_name: str,
+    name: str | None = None,
+    description: str | None = None,
+    add_handoff_messages: bool = True,
 ) -> BaseTool:
     """Create a tool that can handoff control to the requested agent.
 
@@ -68,6 +72,8 @@ def create_handoff_tool(
             If not provided, the tool name will be `transfer_to_<agent_name>`.
         description: Optional description for the handoff tool.
             If not provided, the description will be `Ask agent <agent_name> for help`.
+        add_handoff_messages: Whether to add handoff messages to the message history.
+            If False, the handoff messages will be omitted from the message history.
     """
     if name is None:
         name = f"transfer_to_{_normalize_agent_name(agent_name)}"
@@ -84,14 +90,19 @@ def create_handoff_tool(
             content=f"Successfully transferred to {agent_name}",
             name=name,
             tool_call_id=tool_call_id,
+            response_metadata={METADATA_KEY_HANDOFF_DESTINATION: agent_name},
         )
         last_ai_message = cast(AIMessage, state["messages"][-1])
         # Handle parallel handoffs
         if len(last_ai_message.tool_calls) > 1:
-            handoff_messages = state["messages"][:-1] + [
-                _remove_non_handoff_tool_calls(last_ai_message, tool_call_id),
-                tool_message,
-            ]
+            handoff_messages = state["messages"][:-1]
+            if add_handoff_messages:
+                handoff_messages.extend(
+                    (
+                        _remove_non_handoff_tool_calls(last_ai_message, tool_call_id),
+                        tool_message,
+                    )
+                )
             return Command(
                 graph=Command.PARENT,
                 # NOTE: we are using Send here to allow the ToolNode in langgraph.prebuilt
@@ -100,7 +111,10 @@ def create_handoff_tool(
             )
         # Handle single handoff
         else:
-            handoff_messages = state["messages"] + [tool_message]
+            if add_handoff_messages:
+                handoff_messages = state["messages"] + [tool_message]
+            else:
+                handoff_messages = state["messages"][:-1]
             return Command(
                 goto=agent_name,
                 graph=Command.PARENT,
@@ -132,3 +146,64 @@ def create_handoff_back_messages(
             response_metadata={METADATA_KEY_IS_HANDOFF_BACK: True},
         ),
     )
+
+
+def create_forward_message_tool(supervisor_name: str = "supervisor") -> BaseTool:
+    """Create a tool the supervisor can use to forward a worker message by name.
+
+    This helps avoid information loss any time the supervisor rewrites a worker query
+    to the user and also can save some tokens.
+
+    Args:
+        supervisor_name: The name of the supervisor node (used for namespacing the tool).
+
+    Returns:
+        BaseTool: The 'forward_message' tool.
+    """
+    tool_name = "forward_message"
+    desc = (
+        "Forwards the latest message from the specified agent to the user"
+        " without any changes. Use this to preserve information fidelity, avoid"
+        " misinterpretation of questions or responses, and save time."
+    )
+
+    @tool(tool_name, description=desc)
+    def forward_message(
+        from_agent: str,
+        state: Annotated[dict, InjectedState],
+    ) -> str | Command:
+        target_message = next(
+            (
+                m
+                for m in reversed(state["messages"])
+                if isinstance(m, AIMessage)
+                and (m.name or "").lower() == from_agent.lower()
+                and not m.response_metadata.get(METADATA_KEY_IS_HANDOFF_BACK)
+            ),
+            None,
+        )
+        if not target_message:
+            found_names = set(
+                m.name for m in state["messages"] if isinstance(m, AIMessage) and m.name
+            )
+            return (
+                f"Could not find message from source agent {from_agent}. Found names: {found_names}"
+            )
+        updates = [
+            AIMessage(
+                content=target_message.content,
+                name=supervisor_name,
+                id=str(uuid.uuid4()),
+            ),
+        ]
+
+        return Command(
+            graph=Command.PARENT,
+            # NOTE: this does nothing.
+            goto="__end__",
+            # we also propagate the update to make sure the handoff messages are applied
+            # to the parent graph's state
+            update={"messages": updates},
+        )
+
+    return forward_message

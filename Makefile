@@ -11,7 +11,7 @@ all: help
 TEST_FILE ?= tests/
 
 test:
-	uv run pytest --disable-socket --allow-unix-socket $(TEST_FILE)
+	uv run pytest -vv --disable-socket --allow-unix-socket $(TEST_FILE)
 
 test_watch:
 	uv run ptw . -- $(TEST_FILE)
