@@ -113,7 +113,7 @@ def create_handoff_tool(
             return Command(
                 goto=agent_name,
                 graph=Command.PARENT,
-                update={"messages": handoff_messages},
+                update={**state, "messages": handoff_messages},
             )
 
     handoff_to_agent.metadata = {METADATA_KEY_HANDOFF_DESTINATION: agent_name}
@@ -198,7 +198,7 @@ def create_forward_message_tool(supervisor_name: str = "supervisor") -> BaseTool
             goto="__end__",
             # we also propagate the update to make sure the handoff messages are applied
             # to the parent graph's state
-            update={"messages": updates},
+            update={**state, "messages": updates},
         )
 
     return forward_message
