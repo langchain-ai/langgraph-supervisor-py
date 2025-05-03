@@ -255,9 +255,7 @@ def create_supervisor(
 
         agent_names.add(agent.name)
 
-    extracted_handoff_destinations = _get_handoff_destinations(
-        tools or []
-    )
+    extracted_handoff_destinations = _get_handoff_destinations(tools or [])
     if extracted_handoff_destinations:
         if missing_handoff_destinations := set(agent_names) - set(extracted_handoff_destinations):
             raise ValueError(

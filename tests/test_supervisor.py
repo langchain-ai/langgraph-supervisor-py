@@ -186,9 +186,10 @@ def test_supervisor_basic_workflow(
 
     math_model: FakeChatModel = FakeChatModel(responses=math_agent_messages)
     if include_individual_agent_name:
-        math_model = cast(FakeChatModel, with_agent_name(
-            math_model.bind_tools([add]), include_individual_agent_name
-        ))
+        math_model = cast(
+            FakeChatModel,
+            with_agent_name(math_model.bind_tools([add]), include_individual_agent_name),
+        )
 
     math_agent = create_react_agent(
         model=math_model,
@@ -198,9 +199,10 @@ def test_supervisor_basic_workflow(
 
     research_model = FakeChatModel(responses=research_agent_messages)
     if include_individual_agent_name:
-        research_model = cast(FakeChatModel, with_agent_name(
-            research_model.bind_tools([web_search]), include_individual_agent_name
-        ))
+        research_model = cast(
+            FakeChatModel,
+            with_agent_name(research_model.bind_tools([web_search]), include_individual_agent_name),
+        )
 
     research_agent = create_react_agent(
         model=research_model,
