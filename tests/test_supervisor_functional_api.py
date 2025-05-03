@@ -11,7 +11,7 @@ from langgraph_supervisor import create_supervisor
 
 
 class FakeModel(GenericFakeChatModel):
-    def bind_tools(self, *args, **kwargs) -> "FakeModel":
+    def bind_tools(self, *args: tuple, **kwargs: Any) -> "FakeModel":
         """Do nothing for now."""
         return self
 
@@ -24,15 +24,15 @@ def test_supervisor_functional_workflow() -> None:
 
     # Create a joke agent using functional API
     @task
-    def generate_joke(messages: List[BaseMessage]) -> AIMessage:
+    def generate_joke(messages: List[BaseMessage]) -> BaseMessage:
         """Generate a joke using the model."""
-        return model.invoke([SystemMessage(content="Write a short joke")] + messages)
+        return model.invoke([SystemMessage(content="Write a short joke")] + list(messages))
 
     @entrypoint()
     def joke_agent(state: Dict[str, Any]) -> Dict[str, Any]:
         """Joke agent entrypoint."""
         joke = generate_joke(state["messages"]).result()
-        messages = add_messages(state["messages"], [joke])
+        messages = add_messages(state["messages"], joke)
         return {"messages": messages}
 
     # Set agent name

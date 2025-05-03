@@ -1,5 +1,5 @@
 import re
-from typing import Literal
+from typing import Literal, TypeGuard, cast
 
 from langchain_core.language_models import LanguageModelLike
 from langchain_core.messages import AIMessage, BaseMessage
@@ -11,7 +11,7 @@ CONTENT_PATTERN = re.compile(r"<content>(.*?)</content>", re.DOTALL)
 AgentNameMode = Literal["inline"]
 
 
-def _is_content_blocks_content(content: list[dict] | str) -> bool:
+def _is_content_blocks_content(content: list[dict | str] | str) -> TypeGuard[list[dict]]:
     return (
         isinstance(content, list)
         and len(content) > 0
@@ -35,12 +35,13 @@ def add_inline_agent_name(message: BaseMessage) -> BaseMessage:
         return message
 
     formatted_message = message.model_copy()
-    if _is_content_blocks_content(formatted_message.content):
+    if _is_content_blocks_content(message.content):
         text_blocks = [block for block in message.content if block["type"] == "text"]
         non_text_blocks = [block for block in message.content if block["type"] != "text"]
         content = text_blocks[0]["text"] if text_blocks else ""
         formatted_content = f"<name>{message.name}</name><content>{content}</content>"
-        formatted_message.content = [{"type": "text", "text": formatted_content}] + non_text_blocks
+        formatted_message_content = [{"type": "text", "text": formatted_content}] + non_text_blocks
+        formatted_message.content = formatted_message_content
     else:
         formatted_message.content = (
             f"<name>{message.name}</name><content>{formatted_message.content}</content>"
@@ -62,8 +63,7 @@ def remove_inline_agent_name(message: BaseMessage) -> BaseMessage:
     if not isinstance(message, AIMessage) or not message.content:
         return message
 
-    is_content_blocks_content = _is_content_blocks_content(message.content)
-    if is_content_blocks_content:
+    if is_content_blocks_content := _is_content_blocks_content(message.content):
         text_blocks = [block for block in message.content if block["type"] == "text"]
         if not text_blocks:
             return message
@@ -85,7 +85,7 @@ def remove_inline_agent_name(message: BaseMessage) -> BaseMessage:
         if parsed_content:
             content_blocks = [{"type": "text", "text": parsed_content}] + content_blocks
 
-        parsed_message.content = content_blocks
+        parsed_message.content = cast(list[str | dict], content_blocks)
     else:
         parsed_message.content = parsed_content
     return parsed_message
@@ -120,9 +120,10 @@ def with_agent_name(
     def process_input_messages(messages: list[BaseMessage]) -> list[BaseMessage]:
         return [process_input_message(message) for message in messages]
 
-    model = (
+    chain = (
         process_input_messages
         | model
         | RunnableLambda(process_output_message, name="process_output_message")
     )
-    return model
+
+    return cast(LanguageModelLike, chain)

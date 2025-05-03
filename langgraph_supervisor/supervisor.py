@@ -1,5 +1,5 @@
 import inspect
-from typing import Any, Callable, Literal, Optional, Type, Union
+from typing import Any, Callable, Literal, Optional, Type, Union, cast, get_args
 
 from langchain_core.language_models import BaseChatModel, LanguageModelLike
 from langchain_core.tools import BaseTool
@@ -55,9 +55,9 @@ def _make_call_agent(
     add_handoff_back_messages: bool,
     supervisor_name: str,
 ) -> Callable[[dict], dict] | RunnableCallable:
-    if output_mode not in OutputMode.__args__:
+    if output_mode not in get_args(OutputMode):
         raise ValueError(
-            f"Invalid agent output mode: {output_mode}. Needs to be one of {OutputMode.__args__}"
+            f"Invalid agent output mode: {output_mode}. Needs to be one of {get_args(OutputMode)}"
         )
 
     def _process_output(output: dict) -> dict:
@@ -255,9 +255,9 @@ def create_supervisor(
 
         agent_names.add(agent.name)
 
-    handoff_destinations = _get_handoff_destinations(tools or [])
-    if handoff_destinations:
-        if missing_handoff_destinations := set(agent_names) - set(handoff_destinations):
+    extracted_handoff_destinations = _get_handoff_destinations(tools or [])
+    if extracted_handoff_destinations:
+        if missing_handoff_destinations := set(agent_names) - set(extracted_handoff_destinations):
             raise ValueError(
                 "When providing custom handoff tools, you must provide them for all subagents. "
                 f"Missing handoff tools for agents '{missing_handoff_destinations}'."
@@ -278,12 +278,14 @@ def create_supervisor(
             )
             for agent in agents
         ]
-        all_tools = (tools or []) + handoff_destinations
+        all_tools = (tools or []) + list(handoff_destinations)
 
     if _supports_disable_parallel_tool_calls(model):
-        model = model.bind_tools(all_tools, parallel_tool_calls=parallel_tool_calls)
+        model = cast(BaseChatModel, model).bind_tools(
+            all_tools, parallel_tool_calls=parallel_tool_calls
+        )
     else:
-        model = model.bind_tools(all_tools)
+        model = cast(BaseChatModel, model).bind_tools(all_tools)
 
     if include_agent_name:
         model = with_agent_name(model, include_agent_name)

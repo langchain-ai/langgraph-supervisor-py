@@ -6,7 +6,7 @@ from langgraph_supervisor.agent_name import (
 )
 
 
-def test_add_inline_agent_name():
+def test_add_inline_agent_name() -> None:
     # Test that non-AI messages are returned unchanged.
     human_message = HumanMessage(content="Hello")
     result = add_inline_agent_name(human_message)
@@ -24,8 +24,8 @@ def test_add_inline_agent_name():
     assert result.name == "assistant"
 
 
-def test_add_inline_agent_name_content_blocks():
-    content_blocks = [
+def test_add_inline_agent_name_content_blocks() -> None:
+    content_blocks: list[str | dict] = [
         {"type": "text", "text": "Hello world"},
         {"type": "image", "image_url": "http://example.com/image.jpg"},
     ]
@@ -51,7 +51,7 @@ def test_add_inline_agent_name_content_blocks():
     assert result.content == expected_content_blocks
 
 
-def test_remove_inline_agent_name():
+def test_remove_inline_agent_name() -> None:
     # Test that non-AI messages are returned unchanged.
     human_message = HumanMessage(content="Hello")
     result = remove_inline_agent_name(human_message)
@@ -76,8 +76,8 @@ def test_remove_inline_agent_name():
     assert result.name == "assistant"
 
 
-def test_remove_inline_agent_name_content_blocks():
-    content_blocks = [
+def test_remove_inline_agent_name_content_blocks() -> None:
+    content_blocks: list[str | dict] = [
         {"type": "text", "text": "<name>assistant</name><content>Hello world</content>"},
         {"type": "image", "image_url": "http://example.com/image.jpg"},
     ]
@@ -103,7 +103,7 @@ def test_remove_inline_agent_name_content_blocks():
     assert result.content == expected_content_blocks
 
 
-def test_remove_inline_agent_name_multiline_content():
+def test_remove_inline_agent_name_multiline_content() -> None:
     multiline_content = """<name>assistant</name><content>This is
 a multiline
 message</content>"""
