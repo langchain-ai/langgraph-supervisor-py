@@ -64,12 +64,11 @@ def remove_inline_agent_name(message: BaseMessage) -> BaseMessage:
         return message
 
     if is_content_blocks_content := _is_content_blocks_content(message.content):
-        content_blocks_content = message.content
-        text_blocks = [block for block in content_blocks_content if block["type"] == "text"]
+        text_blocks = [block for block in message.content if block["type"] == "text"]
         if not text_blocks:
             return message
 
-        non_text_blocks = [block for block in content_blocks_content if block["type"] != "text"]
+        non_text_blocks = [block for block in message.content if block["type"] != "text"]
         content = text_blocks[0]["text"]
     else:
         content = message.content
