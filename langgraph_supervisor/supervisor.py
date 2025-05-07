@@ -2,6 +2,7 @@ import inspect
 from typing import Any, Callable, Literal, Optional, Type, Union
 
 from langchain_core.language_models import BaseChatModel, LanguageModelLike
+from langchain_core.runnables import RunnableConfig
 from langchain_core.tools import BaseTool
 from langgraph.graph import END, START, StateGraph
 from langgraph.prebuilt.chat_agent_executor import (
@@ -81,11 +82,11 @@ def _make_call_agent(
             "messages": messages,
         }
 
-    def call_agent(state: dict, config: Optional[dict] = None) -> dict:
+    def call_agent(state: dict, config: RunnableConfig) -> dict:
         output = agent.invoke(state, config)
         return _process_output(output)
 
-    async def acall_agent(state: dict, config: Optional[dict] = None) -> dict:
+    async def acall_agent(state: dict, config: RunnableConfig) -> dict:
         output = await agent.ainvoke(state, config)
         return _process_output(output)
 

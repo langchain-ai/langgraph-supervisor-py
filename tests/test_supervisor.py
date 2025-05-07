@@ -7,7 +7,9 @@ from langchain_core.callbacks.manager import CallbackManagerForLLMRun
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
 from langchain_core.outputs import ChatGeneration, ChatResult
+from langchain_core.runnables import RunnableConfig
 from langchain_core.tools import BaseTool, tool
+from langgraph.graph import MessagesState, StateGraph
 from langgraph.prebuilt import create_react_agent
 
 from langgraph_supervisor import create_supervisor
@@ -545,3 +547,59 @@ def test_supervisor_message_forwarding():
         },
     ]
     assert received == expected
+
+
+def test_metadata_passed_to_subagent() -> None:
+    """Test that metadata from config is passed to sub-agents.
+
+    This test verifies that when a config object with metadata is passed to the supervisor,
+    the metadata is correctly passed to the sub-agent when it is invoked.
+    """
+
+    # Create a tracking agent to verify metadata is passed
+    def test_node(_state: MessagesState, config: RunnableConfig):
+        # Assert that the metadata is passed to the sub-agent
+        assert config["metadata"]["test_key"] == "test_value"
+        assert config["metadata"]["another_key"] == 123
+        # Return a new message if the assertion passes.
+        return {"messages": [AIMessage(content="Test response")]}
+
+    tracking_agent_workflow = StateGraph(MessagesState)
+    tracking_agent_workflow.add_node("test_node", test_node)
+    tracking_agent_workflow.set_entry_point("test_node")
+    tracking_agent_workflow.set_finish_point("test_node")
+    tracking_agent = tracking_agent_workflow.compile()
+    tracking_agent.name = "test_agent"
+
+    # Create a supervisor with the tracking agent
+    supervisor_model = FakeChatModel(
+        responses=[
+            AIMessage(
+                content="",
+                tool_calls=[
+                    {
+                        "name": "transfer_to_test_agent",
+                        "args": {},
+                        "id": "call_123",
+                        "type": "tool_call",
+                    }
+                ],
+            ),
+            AIMessage(content="Final response"),
+        ]
+    )
+
+    supervisor = create_supervisor(
+        agents=[tracking_agent],
+        model=supervisor_model,
+    ).compile()
+
+    # Create config with metadata
+    test_metadata = {"test_key": "test_value", "another_key": 123}
+    config = {"metadata": test_metadata}
+
+    # Invoke the supervisor with the config
+    result = supervisor.invoke({"messages": [HumanMessage(content="Test message")]}, config=config)
+    # Get the last message in the messages list & verify it matches the value
+    # returned from the node.
+    assert result["messages"][-1].content == "Final response"
