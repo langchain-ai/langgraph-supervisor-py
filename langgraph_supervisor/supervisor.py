@@ -81,12 +81,12 @@ def _make_call_agent(
             "messages": messages,
         }
 
-    def call_agent(state: dict) -> dict:
-        output = agent.invoke(state)
+    def call_agent(state: dict, config: Optional[dict] = None) -> dict:
+        output = agent.invoke(state, config)
         return _process_output(output)
 
-    async def acall_agent(state: dict) -> dict:
-        output = await agent.ainvoke(state)
+    async def acall_agent(state: dict, config: Optional[dict] = None) -> dict:
+        output = await agent.ainvoke(state, config)
         return _process_output(output)
 
     return RunnableCallable(call_agent, acall_agent)
