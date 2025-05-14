@@ -267,7 +267,7 @@ def create_supervisor(
         # Handoff tools should be already provided here
         all_tools = tools or []
     else:
-        handoff_destinations = [
+        handoff_tools = [
             create_handoff_tool(
                 agent_name=agent.name,
                 name=(
@@ -279,7 +279,7 @@ def create_supervisor(
             )
             for agent in agents
         ]
-        all_tools = (tools or []) + list(handoff_destinations)
+        all_tools = (tools or []) + list(handoff_tools)
 
     if _supports_disable_parallel_tool_calls(model):
         model = cast(BaseChatModel, model).bind_tools(
