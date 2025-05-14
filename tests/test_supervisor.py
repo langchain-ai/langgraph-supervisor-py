@@ -564,7 +564,7 @@ def test_metadata_passed_to_subagent() -> None:
     """
 
     # Create a tracking agent to verify metadata is passed
-    def test_node(_state: MessagesState, config: RunnableConfig):
+    def test_node(_state: MessagesState, config: RunnableConfig) -> dict[str, list[BaseMessage]]:
         # Assert that the metadata is passed to the sub-agent
         assert config["metadata"]["test_key"] == "test_value"
         assert config["metadata"]["another_key"] == 123
@@ -603,7 +603,7 @@ def test_metadata_passed_to_subagent() -> None:
 
     # Create config with metadata
     test_metadata = {"test_key": "test_value", "another_key": 123}
-    config = {"metadata": test_metadata}
+    config: RunnableConfig = {"metadata": test_metadata}
 
     # Invoke the supervisor with the config
     result = supervisor.invoke({"messages": [HumanMessage(content="Test message")]}, config=config)
