@@ -11,7 +11,7 @@ all: help
 TEST_FILE ?= tests/
 
 test:
-	uv run pytest --disable-socket --allow-unix-socket $(TEST_FILE)
+	uv run pytest -vv --disable-socket --allow-unix-socket $(TEST_FILE)
 
 test_watch:
 	uv run ptw . -- $(TEST_FILE)
@@ -28,7 +28,7 @@ lint_diff format_diff: PYTHON_FILES=$(shell git diff --relative=. --name-only --
 lint lint_diff:
 	[ "$(PYTHON_FILES)" = "" ] ||	uv run ruff format $(PYTHON_FILES) --diff
 	[ "$(PYTHON_FILES)" = "" ] ||	uv run ruff check $(PYTHON_FILES) --diff
-	# [ "$(PYTHON_FILES)" = "" ] || uv run mypy $(PYTHON_FILES)
+	[ "$(PYTHON_FILES)" = "" ] || uv run mypy $(PYTHON_FILES)
 
 format format_diff:
 	[ "$(PYTHON_FILES)" = "" ] || uv run ruff check --fix $(PYTHON_FILES)
