@@ -1,5 +1,5 @@
 import inspect
-from typing import Any, Callable, Literal, Optional, Type, Union, cast, get_args
+from typing import Any, Callable, Literal, Optional, Sequence, Type, Union, cast, get_args
 
 from langchain_core.language_models import BaseChatModel, LanguageModelLike
 from langchain_core.runnables import RunnableConfig
@@ -95,7 +95,7 @@ def _make_call_agent(
     return RunnableCallable(call_agent, acall_agent)
 
 
-def _get_handoff_destinations(tools: list[BaseTool | Callable]) -> list[str]:
+def _get_handoff_destinations(tools: Sequence[BaseTool | Callable]) -> list[str]:
     """Extract handoff destinations from provided tools.
     Args:
         tools: List of tools to inspect.
@@ -109,6 +109,65 @@ def _get_handoff_destinations(tools: list[BaseTool | Callable]) -> list[str]:
         and tool.metadata is not None
         and METADATA_KEY_HANDOFF_DESTINATION in tool.metadata
     ]
+
+
+def _prepare_tools(
+    tools: list[BaseTool | Callable] | ToolNode | None,
+    handoff_tool_prefix: Optional[str],
+    add_handoff_messages: bool,
+    agent_names: set[str],
+) -> ToolNode:
+    """Prepare the ToolNode to use in create react agent."""
+    if isinstance(tools, ToolNode):
+        input_tool_node = tools
+        tool_classes = list(tools.tools_by_name.values())
+    elif tools:
+        input_tool_node = ToolNode(tools)
+        # get the tool functions wrapped in a tool class from the ToolNode
+        tool_classes = list(input_tool_node.tools_by_name.values())
+    else:
+        input_tool_node = None
+        tool_classes = []
+
+    handoff_destinations = _get_handoff_destinations(tool_classes)
+    if handoff_destinations:
+        if missing_handoff_destinations := set(agent_names) - set(handoff_destinations):
+            raise ValueError(
+                "When providing custom handoff tools, you must provide them for all subagents. "
+                f"Missing handoff tools for agents '{missing_handoff_destinations}'."
+            )
+
+        # Handoff tools should be already provided here
+        tool_node = cast(ToolNode, input_tool_node)
+    else:
+        handoff_tools = [
+            create_handoff_tool(
+                agent_name=agent_name,
+                name=(
+                    None
+                    if handoff_tool_prefix is None
+                    else f"{handoff_tool_prefix}{_normalize_agent_name(agent_name)}"
+                ),
+                add_handoff_messages=add_handoff_messages,
+            )
+            for agent_name in agent_names
+        ]
+        all_tools = tool_classes + list(handoff_tools)
+
+        # re-wrap the combined tools in a ToolNode
+        # if the original input was a ToolNode, apply the same params
+        if input_tool_node is not None:
+            tool_node = ToolNode(
+                all_tools,
+                name=input_tool_node.name,
+                tags=list(input_tool_node.tags) if input_tool_node.tags else None,
+                handle_tool_errors=input_tool_node.handle_tool_errors,
+                messages_key=input_tool_node.messages_key,
+            )
+        else:
+            tool_node = ToolNode(all_tools)
+
+    return tool_node
 
 
 def create_supervisor(
@@ -258,48 +317,21 @@ def create_supervisor(
 
         agent_names.add(agent.name)
 
-    if isinstance(tools, ToolNode):
-        tool_classes = list(tools.tools_by_name.values())
-        tool_node = tools
-    elif tools:
-        tool_node = ToolNode(tools)
-        # get the tool functions wrapped in a tool class from the ToolNode
-        tool_classes = list(tool_node.tools_by_name.values())
-    else:
-        tool_node = None
-        tool_classes = []
+    tool_node = _prepare_tools(
+        tools,
+        handoff_tool_prefix,
+        add_handoff_messages,
+        agent_names,
+    )
+    all_tools = list(tool_node.tools_by_name.values())
 
-    handoff_destinations = _get_handoff_destinations(tool_classes)
-    if handoff_destinations:
-        if missing_handoff_destinations := set(agent_names) - set(handoff_destinations):
-            raise ValueError(
-                "When providing custom handoff tools, you must provide them for all subagents. "
-                f"Missing handoff tools for agents '{missing_handoff_destinations}'."
+    if _should_bind_tools(model, all_tools):
+        if _supports_disable_parallel_tool_calls(model):
+            model = cast(BaseChatModel, model).bind_tools(
+                all_tools, parallel_tool_calls=parallel_tool_calls
             )
-
-        # Handoff tools should be already provided here
-        all_tools = tool_classes
-    else:
-        handoff_tools = [
-            create_handoff_tool(
-                agent_name=agent.name,
-                name=(
-                    None
-                    if handoff_tool_prefix is None
-                    else f"{handoff_tool_prefix}{_normalize_agent_name(agent.name)}"
-                ),
-                add_handoff_messages=add_handoff_messages,
-            )
-            for agent in agents
-        ]
-        all_tools = (tools or []) + list(handoff_tools)
-
-    if _supports_disable_parallel_tool_calls(model):
-        model = cast(BaseChatModel, model).bind_tools(
-            all_tools, parallel_tool_calls=parallel_tool_calls
-        )
-    else:
-        model = cast(BaseChatModel, model).bind_tools(all_tools)
+        else:
+            model = cast(BaseChatModel, model).bind_tools(all_tools)
 
     if include_agent_name:
         model = with_agent_name(model, include_agent_name)
@@ -307,7 +339,7 @@ def create_supervisor(
     supervisor_agent = create_react_agent(
         name=supervisor_name,
         model=model,
-        tools=tool_node if tool_node else tool_classes,
+        tools=tool_node,
         prompt=prompt,
         state_schema=state_schema,
         response_format=response_format,
