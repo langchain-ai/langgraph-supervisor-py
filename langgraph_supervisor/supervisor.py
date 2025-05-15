@@ -1,7 +1,8 @@
 import inspect
-from typing import Any, Callable, Literal, Optional, Type, Union, cast
+from typing import Any, Callable, Literal, Optional, Type, Union, cast, get_args
 
 from langchain_core.language_models import BaseChatModel, LanguageModelLike
+from langchain_core.runnables import RunnableConfig
 from langchain_core.tools import BaseTool
 from langgraph.graph import END, START, StateGraph
 from langgraph.prebuilt import ToolNode
@@ -19,6 +20,7 @@ from langgraph.utils.runnable import RunnableCallable
 from langgraph_supervisor.agent_name import AgentNameMode, with_agent_name
 from langgraph_supervisor.handoff import (
     METADATA_KEY_HANDOFF_DESTINATION,
+    _normalize_agent_name,
     create_handoff_back_messages,
     create_handoff_tool,
 )
@@ -56,9 +58,9 @@ def _make_call_agent(
     add_handoff_back_messages: bool,
     supervisor_name: str,
 ) -> Callable[[dict], dict] | RunnableCallable:
-    if output_mode not in OutputMode.__args__:
+    if output_mode not in get_args(OutputMode):
         raise ValueError(
-            f"Invalid agent output mode: {output_mode}. Needs to be one of {OutputMode.__args__}"
+            f"Invalid agent output mode: {output_mode}. Needs to be one of {get_args(OutputMode)}"
         )
 
     def _process_output(output: dict) -> dict:
@@ -67,6 +69,7 @@ def _make_call_agent(
             pass
         elif output_mode == "last_message":
             messages = messages[-1:]
+
         else:
             raise ValueError(
                 f"Invalid agent output mode: {output_mode}. "
@@ -81,18 +84,24 @@ def _make_call_agent(
             "messages": messages,
         }
 
-    def call_agent(state: dict) -> dict:
-        output = agent.invoke(state)
+    def call_agent(state: dict, config: RunnableConfig) -> dict:
+        output = agent.invoke(state, config)
         return _process_output(output)
 
-    async def acall_agent(state: dict) -> dict:
-        output = await agent.ainvoke(state)
+    async def acall_agent(state: dict, config: RunnableConfig) -> dict:
+        output = await agent.ainvoke(state, config)
         return _process_output(output)
 
     return RunnableCallable(call_agent, acall_agent)
 
 
 def _get_handoff_destinations(tools: list[BaseTool | Callable]) -> list[str]:
+    """Extract handoff destinations from provided tools.
+    Args:
+        tools: List of tools to inspect.
+    Returns:
+        List of agent names that are handoff destinations.
+    """
     return [
         tool.metadata[METADATA_KEY_HANDOFF_DESTINATION]
         for tool in tools
@@ -115,17 +124,23 @@ def create_supervisor(
     state_schema: StateSchemaType = AgentState,
     config_schema: Type[Any] | None = None,
     output_mode: OutputMode = "last_message",
-    add_handoff_back_messages: bool = True,
+    add_handoff_messages: bool = True,
+    handoff_tool_prefix: Optional[str] = None,
+    add_handoff_back_messages: Optional[bool] = None,
     supervisor_name: str = "supervisor",
     include_agent_name: AgentNameMode | None = None,
 ) -> StateGraph:
     """Create a multi-agent supervisor.
 
     Args:
-        agents: List of agents to manage
+        agents: List of agents to manage.
+            An agent can be a LangGraph [CompiledStateGraph](https://langchain-ai.github.io/langgraph/reference/graphs/#langgraph.graph.state.CompiledStateGraph),
+            a functional API [workflow](https://langchain-ai.github.io/langgraph/reference/func/#langgraph.func.entrypoint),
+            or any other [Pregel](https://langchain-ai.github.io/langgraph/reference/pregel/#langgraph.pregel.Pregel) object.
         model: Language model to use for the supervisor
         tools: Tools to use for the supervisor
         prompt: Optional prompt to use for the supervisor. Can be one of:
+
             - str: This is converted to a SystemMessage and added to the beginning of the list of messages in state["messages"].
             - SystemMessage: this is added to the beginning of the list of messages in state["messages"].
             - Callable: This function should take in full graph state and the output is then passed to the language model.
@@ -159,20 +174,75 @@ def create_supervisor(
                 To control parallel tool calling for other providers, add explicit instructions for tool use to the system prompt.
         state_schema: State schema to use for the supervisor graph.
         config_schema: An optional schema for configuration.
-            Use this to expose configurable parameters via supervisor.config_specs.
+            Use this to expose configurable parameters via `supervisor.config_specs`.
         output_mode: Mode for adding managed agents' outputs to the message history in the multi-agent workflow.
             Can be one of:
+
             - `full_history`: add the entire agent message history
             - `last_message`: add only the last message (default)
+        add_handoff_messages: Whether to add a pair of (AIMessage, ToolMessage) to the message history
+            when a handoff occurs.
+        handoff_tool_prefix: Optional prefix for the handoff tools (e.g., "delegate_to_" or "transfer_to_")
+            If provided, the handoff tools will be named `handoff_tool_prefix_agent_name`.
+            If not provided, the handoff tools will be named `transfer_to_agent_name`.
         add_handoff_back_messages: Whether to add a pair of (AIMessage, ToolMessage) to the message history
             when returning control to the supervisor to indicate that a handoff has occurred.
         supervisor_name: Name of the supervisor node.
         include_agent_name: Use to specify how to expose the agent name to the underlying supervisor LLM.
 
             - None: Relies on the LLM provider using the name attribute on the AI message. Currently, only OpenAI supports this.
-            - "inline": Add the agent name directly into the content field of the AI message using XML-style tags.
-                Example: "How can I help you" -> "<name>agent_name</name><content>How can I help you?</content>"
+            - `"inline"`: Add the agent name directly into the content field of the AI message using XML-style tags.
+                Example: `"How can I help you"` -> `"<name>agent_name</name><content>How can I help you?</content>"`
+
+    Example:
+        ```python
+        from langchain_openai import ChatOpenAI
+
+        from langgraph_supervisor import create_supervisor
+        from langgraph.prebuilt import create_react_agent
+
+        # Create specialized agents
+
+        def add(a: float, b: float) -> float:
+            '''Add two numbers.'''
+            return a + b
+
+        def web_search(query: str) -> str:
+            '''Search the web for information.'''
+            return 'Here are the headcounts for each of the FAANG companies in 2024...'
+
+        math_agent = create_react_agent(
+            model="openai:gpt-4o",
+            tools=[add],
+            name="math_expert",
+        )
+
+        research_agent = create_react_agent(
+            model="openai:gpt-4o",
+            tools=[web_search],
+            name="research_expert",
+        )
+
+        # Create supervisor workflow
+        workflow = create_supervisor(
+            [research_agent, math_agent],
+            model=ChatOpenAI(model="gpt-4o"),
+        )
+
+        # Compile and run
+        app = workflow.compile()
+        result = app.invoke({
+            "messages": [
+                {
+                    "role": "user",
+                    "content": "what's the combined headcount of the FAANG companies in 2024?"
+                }
+            ]
+        })
+        ```
     """
+    if add_handoff_back_messages is None:
+        add_handoff_back_messages = add_handoff_messages
     agent_names = set()
     for agent in agents:
         if agent.name is None or agent.name == "LangGraph":
@@ -210,18 +280,26 @@ def create_supervisor(
         # Handoff tools should be already provided here
         all_tools = tool_classes
     else:
-        handoff_destinations = [create_handoff_tool(agent_name=agent.name) for agent in agents]
-        all_tools = tool_classes + handoff_destinations
-
-    tool_calling_enabled = len(tool_classes) > 0
-
-    if _should_bind_tools(model, tool_classes) and tool_calling_enabled:
-        if _supports_disable_parallel_tool_calls(model):
-            model = cast(BaseChatModel, model).bind_tools(
-                all_tools, parallel_tool_calls=parallel_tool_calls
+        handoff_tools = [
+            create_handoff_tool(
+                agent_name=agent.name,
+                name=(
+                    None
+                    if handoff_tool_prefix is None
+                    else f"{handoff_tool_prefix}{_normalize_agent_name(agent.name)}"
+                ),
+                add_handoff_messages=add_handoff_messages,
             )
-        else:
-            model = cast(BaseChatModel, model).bind_tools(all_tools)
+            for agent in agents
+        ]
+        all_tools = (tools or []) + list(handoff_tools)
+
+    if _supports_disable_parallel_tool_calls(model):
+        model = cast(BaseChatModel, model).bind_tools(
+            all_tools, parallel_tool_calls=parallel_tool_calls
+        )
+    else:
+        model = cast(BaseChatModel, model).bind_tools(all_tools)
 
     if include_agent_name:
         model = with_agent_name(model, include_agent_name)
@@ -244,8 +322,8 @@ def create_supervisor(
             _make_call_agent(
                 agent,
                 output_mode,
-                add_handoff_back_messages,
-                supervisor_name,
+                add_handoff_back_messages=add_handoff_back_messages,
+                supervisor_name=supervisor_name,
             ),
         )
         builder.add_edge(agent.name, supervisor_agent.name)
