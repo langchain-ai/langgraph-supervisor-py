@@ -111,13 +111,13 @@ def _get_handoff_destinations(tools: Sequence[BaseTool | Callable]) -> list[str]
     ]
 
 
-def _prepare_tools(
+def _prepare_tool_node(
     tools: list[BaseTool | Callable] | ToolNode | None,
     handoff_tool_prefix: Optional[str],
     add_handoff_messages: bool,
     agent_names: set[str],
 ) -> ToolNode:
-    """Prepare the ToolNode to use in create react agent."""
+    """Prepare the ToolNode to use in supervisor agent."""
     if isinstance(tools, ToolNode):
         input_tool_node = tools
         tool_classes = list(tools.tools_by_name.values())
@@ -317,7 +317,7 @@ def create_supervisor(
 
         agent_names.add(agent.name)
 
-    tool_node = _prepare_tools(
+    tool_node = _prepare_tool_node(
         tools,
         handoff_tool_prefix,
         add_handoff_messages,
