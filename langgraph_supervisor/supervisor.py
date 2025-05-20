@@ -1,5 +1,6 @@
 import inspect
 from typing import Any, Callable, Literal, Optional, Sequence, Type, Union, cast, get_args
+from uuid import UUID, uuid5
 
 from langchain_core.language_models import BaseChatModel, LanguageModelLike
 from langchain_core.runnables import RunnableConfig
@@ -15,6 +16,7 @@ from langgraph.prebuilt.chat_agent_executor import (
     create_react_agent,
 )
 from langgraph.pregel import Pregel
+from langgraph.utils.config import patch_configurable
 from langgraph.utils.runnable import RunnableCallable
 
 from langgraph_supervisor.agent_name import AgentNameMode, with_agent_name
@@ -85,11 +87,25 @@ def _make_call_agent(
         }
 
     def call_agent(state: dict, config: RunnableConfig) -> dict:
-        output = agent.invoke(state, config)
+        thread_id = config["configurable"].get("thread_id")
+        output = agent.invoke(
+            state,
+            patch_configurable(
+                config,
+                {"thread_id": uuid5(UUID(str(thread_id)), agent.name) if thread_id else None},
+            ),
+        )
         return _process_output(output)
 
     async def acall_agent(state: dict, config: RunnableConfig) -> dict:
-        output = await agent.ainvoke(state, config)
+        thread_id = config["configurable"].get("thread_id")
+        output = await agent.ainvoke(
+            state,
+            patch_configurable(
+                config,
+                {"thread_id": uuid5(UUID(str(thread_id)), agent.name) if thread_id else None},
+            ),
+        )
         return _process_output(output)
 
     return RunnableCallable(call_agent, acall_agent)
