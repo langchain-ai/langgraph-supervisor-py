@@ -16,6 +16,7 @@ from langgraph.prebuilt.chat_agent_executor import (
     create_react_agent,
 )
 from langgraph.pregel import Pregel
+from langgraph.pregel.remote import RemoteGraph
 from langgraph.utils.config import patch_configurable
 from langgraph.utils.runnable import RunnableCallable
 
@@ -93,7 +94,9 @@ def _make_call_agent(
             patch_configurable(
                 config,
                 {"thread_id": uuid5(UUID(str(thread_id)), agent.name) if thread_id else None},
-            ),
+            )
+            if isinstance(agent, RemoteGraph)
+            else config,
         )
         return _process_output(output)
 
@@ -104,7 +107,9 @@ def _make_call_agent(
             patch_configurable(
                 config,
                 {"thread_id": uuid5(UUID(str(thread_id)), agent.name) if thread_id else None},
-            ),
+            )
+            if isinstance(agent, RemoteGraph)
+            else config,
         )
         return _process_output(output)
 
