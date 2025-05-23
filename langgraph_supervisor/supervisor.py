@@ -201,7 +201,7 @@ def create_supervisor(
         Union[StructuredResponseSchema, tuple[str, StructuredResponseSchema]]
     ] = None,
     parallel_tool_calls: bool = False,
-    state_schema: StateSchemaType = AgentState,
+    state_schema: Optional[StateSchemaType] = None,
     config_schema: Type[Any] | None = None,
     output_mode: OutputMode = "last_message",
     add_handoff_messages: bool = True,
