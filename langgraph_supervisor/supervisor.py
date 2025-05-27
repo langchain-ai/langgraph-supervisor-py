@@ -94,7 +94,7 @@ def _make_call_agent(
             state,
             patch_configurable(
                 config,
-                {"thread_id": uuid5(UUID(str(thread_id)), agent.name) if thread_id else None},
+                {"thread_id": str(uuid5(UUID(str(thread_id)), agent.name)) if thread_id else None},
             )
             if isinstance(agent, RemoteGraph)
             else config,
@@ -107,7 +107,7 @@ def _make_call_agent(
             state,
             patch_configurable(
                 config,
-                {"thread_id": uuid5(UUID(str(thread_id)), agent.name) if thread_id else None},
+                {"thread_id": str(uuid5(UUID(str(thread_id)), agent.name)) if thread_id else None},
             )
             if isinstance(agent, RemoteGraph)
             else config,
