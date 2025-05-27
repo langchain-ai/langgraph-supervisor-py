@@ -8,6 +8,8 @@ from langchain_core.tools import BaseTool
 from langgraph.graph import END, START, StateGraph
 from langgraph.prebuilt import ToolNode
 from langgraph.prebuilt.chat_agent_executor import (
+    AgentState,
+    AgentStateWithStructuredResponse,
     Prompt,
     StateSchemaType,
     StructuredResponseSchema,
@@ -322,6 +324,12 @@ def create_supervisor(
     """
     if add_handoff_back_messages is None:
         add_handoff_back_messages = add_handoff_messages
+
+    if state_schema is None:
+        state_schema = (
+            AgentStateWithStructuredResponse if response_format is not None else AgentState
+        )
+
     agent_names = set()
     for agent in agents:
         if agent.name is None or agent.name == "LangGraph":
