@@ -8,7 +8,6 @@ from langchain_core.tools import BaseTool
 from langgraph.graph import END, START, StateGraph
 from langgraph.prebuilt import ToolNode
 from langgraph.prebuilt.chat_agent_executor import (
-    AgentState,
     Prompt,
     StateSchemaType,
     StructuredResponseSchema,
