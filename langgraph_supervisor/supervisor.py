@@ -19,7 +19,7 @@ from langgraph.prebuilt.chat_agent_executor import (
 from langgraph.pregel import Pregel
 from langgraph.pregel.remote import RemoteGraph
 from langgraph.utils.config import patch_configurable
-from langgraph.utils.runnable import RunnableCallable
+from langgraph.utils.runnable import RunnableCallable, RunnableLike
 
 from langgraph_supervisor.agent_name import AgentNameMode, with_agent_name
 from langgraph_supervisor.handoff import (
@@ -210,6 +210,8 @@ def create_supervisor(
     add_handoff_back_messages: Optional[bool] = None,
     supervisor_name: str = "supervisor",
     include_agent_name: AgentNameMode | None = None,
+    pre_model_hook: Optional[RunnableLike] = None,
+    post_model_hook: Optional[RunnableLike] = None
 ) -> StateGraph:
     """Create a multi-agent supervisor.
 
@@ -371,6 +373,8 @@ def create_supervisor(
         prompt=prompt,
         state_schema=state_schema,
         response_format=response_format,
+        pre_model_hook=pre_model_hook,
+        post_model_hook= post_model_hook
     )
 
     builder = StateGraph(state_schema, config_schema=config_schema)
