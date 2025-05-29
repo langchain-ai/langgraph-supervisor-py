@@ -201,6 +201,8 @@ def create_supervisor(
     response_format: Optional[
         Union[StructuredResponseSchema, tuple[str, StructuredResponseSchema]]
     ] = None,
+    pre_model_hook: Optional[RunnableLike] = None,
+    post_model_hook: Optional[RunnableLike] = None,
     parallel_tool_calls: bool = False,
     state_schema: StateSchemaType | None = None,
     config_schema: Type[Any] | None = None,
@@ -210,8 +212,6 @@ def create_supervisor(
     add_handoff_back_messages: Optional[bool] = None,
     supervisor_name: str = "supervisor",
     include_agent_name: AgentNameMode | None = None,
-    pre_model_hook: Optional[RunnableLike] = None,
-    post_model_hook: Optional[RunnableLike] = None
 ) -> StateGraph:
     """Create a multi-agent supervisor.
 
@@ -247,6 +247,41 @@ def create_supervisor(
             !!! Note
                 `response_format` requires `structured_response` key in your state schema.
                 You can use the prebuilt `langgraph.prebuilt.chat_agent_executor.AgentStateWithStructuredResponse`.
+        pre_model_hook: An optional node to add before the LLM node in the supervisor agent (i.e., the node that calls the LLM).
+            Useful for managing long message histories (e.g., message trimming, summarization, etc.).
+            Pre-model hook must be a callable or a runnable that takes in current graph state and returns a state update in the form of
+                ```python
+                # At least one of `messages` or `llm_input_messages` MUST be provided
+                {
+                    # If provided, will UPDATE the `messages` in the state
+                    "messages": [RemoveMessage(id=REMOVE_ALL_MESSAGES), ...],
+                    # If provided, will be used as the input to the LLM,
+                    # and will NOT UPDATE `messages` in the state
+                    "llm_input_messages": [...],
+                    # Any other state keys that need to be propagated
+                    ...
+                }
+                ```
+
+            !!! Important
+                At least one of `messages` or `llm_input_messages` MUST be provided and will be used as an input to the `agent` node.
+                The rest of the keys will be added to the graph state.
+
+            !!! Warning
+                If you are returning `messages` in the pre-model hook, you should OVERWRITE the `messages` key by doing the following:
+
+                ```python
+                {
+                    "messages": [RemoveMessage(id=REMOVE_ALL_MESSAGES), *new_messages]
+                    ...
+                }
+                ```
+        post_model_hook: An optional node to add after the LLM node in the supervisor agent (i.e., the node that calls the LLM).
+            Useful for implementing human-in-the-loop, guardrails, validation, or other post-processing.
+            Post-model hook must be a callable or a runnable that takes in current graph state and returns a state update.
+
+            !!! Note
+                Only available with `langgraph-prebuilt>=0.2.0`.
         parallel_tool_calls: Whether to allow the supervisor LLM to call tools in parallel (only OpenAI and Anthropic).
             Use this to control whether the supervisor can hand off to multiple agents at once.
             If True, will enable parallel tool calls.
@@ -374,7 +409,7 @@ def create_supervisor(
         state_schema=state_schema,
         response_format=response_format,
         pre_model_hook=pre_model_hook,
-        post_model_hook= post_model_hook
+        post_model_hook=post_model_hook,
     )
 
     builder = StateGraph(state_schema, config_schema=config_schema)
