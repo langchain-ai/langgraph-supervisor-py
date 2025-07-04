@@ -1,5 +1,6 @@
 import inspect
 from typing import Any, Callable, Literal, Optional, Sequence, Type, Union, cast, get_args
+from uuid import UUID, uuid5
 
 from langchain_core.language_models import BaseChatModel, LanguageModelLike
 from langchain_core.runnables import RunnableConfig
@@ -9,6 +10,7 @@ from langgraph.graph import END, START, StateGraph
 from langgraph.prebuilt import ToolNode
 from langgraph.prebuilt.chat_agent_executor import (
     AgentState,
+    AgentStateWithStructuredResponse,
     Prompt,
     StateSchemaType,
     StructuredResponseSchema,
@@ -16,7 +18,9 @@ from langgraph.prebuilt.chat_agent_executor import (
     create_react_agent,
 )
 from langgraph.pregel import Pregel
-from langgraph.utils.runnable import RunnableCallable
+from langgraph.pregel.remote import RemoteGraph
+from langgraph.utils.config import patch_configurable
+from langgraph.utils.runnable import RunnableCallable, RunnableLike
 
 from langgraph_supervisor.agent_name import AgentNameMode, with_agent_name
 from langgraph_supervisor.handoff import (
@@ -89,11 +93,29 @@ def _make_call_agent(
         }
 
     def call_agent(state: dict, config: RunnableConfig) -> dict:
-        output = agent.invoke(state, config)
+        thread_id = config["configurable"].get("thread_id")
+        output = agent.invoke(
+            state,
+            patch_configurable(
+                config,
+                {"thread_id": str(uuid5(UUID(str(thread_id)), agent.name)) if thread_id else None},
+            )
+            if isinstance(agent, RemoteGraph)
+            else config,
+        )
         return _process_output(output)
 
     async def acall_agent(state: dict, config: RunnableConfig) -> dict:
-        output = await agent.ainvoke(state, config)
+        thread_id = config["configurable"].get("thread_id")
+        output = await agent.ainvoke(
+            state,
+            patch_configurable(
+                config,
+                {"thread_id": str(uuid5(UUID(str(thread_id)), agent.name)) if thread_id else None},
+            )
+            if isinstance(agent, RemoteGraph)
+            else config,
+        )
         return _process_output(output)
 
     return RunnableCallable(call_agent, acall_agent)
@@ -183,8 +205,10 @@ def create_supervisor(
     response_format: Optional[
         Union[StructuredResponseSchema, tuple[str, StructuredResponseSchema]]
     ] = None,
+    pre_model_hook: Optional[RunnableLike] = None,
+    post_model_hook: Optional[RunnableLike] = None,
     parallel_tool_calls: bool = False,
-    state_schema: StateSchemaType = AgentState,
+    state_schema: StateSchemaType | None = None,
     config_schema: Type[Any] | None = None,
     output_mode: OutputMode = "last_message",
     add_handoff_messages: bool = True,
@@ -227,6 +251,41 @@ def create_supervisor(
             !!! Note
                 `response_format` requires `structured_response` key in your state schema.
                 You can use the prebuilt `langgraph.prebuilt.chat_agent_executor.AgentStateWithStructuredResponse`.
+        pre_model_hook: An optional node to add before the LLM node in the supervisor agent (i.e., the node that calls the LLM).
+            Useful for managing long message histories (e.g., message trimming, summarization, etc.).
+            Pre-model hook must be a callable or a runnable that takes in current graph state and returns a state update in the form of
+                ```python
+                # At least one of `messages` or `llm_input_messages` MUST be provided
+                {
+                    # If provided, will UPDATE the `messages` in the state
+                    "messages": [RemoveMessage(id=REMOVE_ALL_MESSAGES), ...],
+                    # If provided, will be used as the input to the LLM,
+                    # and will NOT UPDATE `messages` in the state
+                    "llm_input_messages": [...],
+                    # Any other state keys that need to be propagated
+                    ...
+                }
+                ```
+
+            !!! Important
+                At least one of `messages` or `llm_input_messages` MUST be provided and will be used as an input to the `agent` node.
+                The rest of the keys will be added to the graph state.
+
+            !!! Warning
+                If you are returning `messages` in the pre-model hook, you should OVERWRITE the `messages` key by doing the following:
+
+                ```python
+                {
+                    "messages": [RemoveMessage(id=REMOVE_ALL_MESSAGES), *new_messages]
+                    ...
+                }
+                ```
+        post_model_hook: An optional node to add after the LLM node in the supervisor agent (i.e., the node that calls the LLM).
+            Useful for implementing human-in-the-loop, guardrails, validation, or other post-processing.
+            Post-model hook must be a callable or a runnable that takes in current graph state and returns a state update.
+
+            !!! Note
+                Only available with `langgraph-prebuilt>=0.2.0`.
         parallel_tool_calls: Whether to allow the supervisor LLM to call tools in parallel (only OpenAI and Anthropic).
             Use this to control whether the supervisor can hand off to multiple agents at once.
             If True, will enable parallel tool calls.
@@ -306,6 +365,12 @@ def create_supervisor(
     """
     if add_handoff_back_messages is None:
         add_handoff_back_messages = add_handoff_messages
+
+    if state_schema is None:
+        state_schema = (
+            AgentStateWithStructuredResponse if response_format is not None else AgentState
+        )
+
     agent_names = set()
     for agent in agents:
         if agent.name is None or agent.name == "LangGraph":
@@ -347,6 +412,8 @@ def create_supervisor(
         prompt=prompt,
         state_schema=state_schema,
         response_format=response_format,
+        pre_model_hook=pre_model_hook,
+        post_model_hook=post_model_hook,
     )
 
     builder = StateGraph(state_schema, config_schema=config_schema)
