@@ -130,7 +130,11 @@ def _make_call_agent(
                 # stream all possible modes to ensure we don't miss what the parent wants
                 # The parent will filter based on what it requested
                 stream_modes: list[Literal["values", "updates", "debug", "messages", "custom"]] = [
-                    "values", "updates", "custom", "messages", "debug"
+                    "values",
+                    "updates",
+                    "custom",
+                    "messages",
+                    "debug",
                 ]
 
                 # Stream from the agent with all modes
