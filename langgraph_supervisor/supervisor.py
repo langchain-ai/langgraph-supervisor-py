@@ -5,6 +5,7 @@ from uuid import UUID, uuid5
 from langchain_core.language_models import BaseChatModel, LanguageModelLike
 from langchain_core.runnables import RunnableConfig
 from langchain_core.tools import BaseTool
+from langgraph.config import get_stream_writer  # For custom event streaming support
 from langgraph.graph import END, START, StateGraph
 from langgraph.prebuilt import ToolNode
 from langgraph.prebuilt.chat_agent_executor import (
@@ -20,7 +21,6 @@ from langgraph.pregel import Pregel
 from langgraph.pregel.remote import RemoteGraph
 from langgraph.utils.config import patch_configurable
 from langgraph.utils.runnable import RunnableCallable, RunnableLike
-from langgraph.config import get_stream_writer  # For custom event streaming support
 
 from langgraph_supervisor.agent_name import AgentNameMode, with_agent_name
 from langgraph_supervisor.handoff import (
@@ -64,7 +64,7 @@ def _make_call_agent(
     supervisor_name: str,
 ) -> Callable[[dict], dict] | RunnableCallable:
     """Create a callable that invokes a sub-agent.
-    
+
     This function creates both sync and async callables for invoking sub-agents.
     The async version supports streaming custom events from sub-agents when used
     in a streaming context.
@@ -110,84 +110,86 @@ def _make_call_agent(
 
     async def acall_agent(state: dict, config: RunnableConfig) -> dict:
         thread_id = config["configurable"].get("thread_id")
-        
+
         # Configure thread_id for RemoteGraph
         if isinstance(agent, RemoteGraph):
             config = patch_configurable(
                 config,
                 {"thread_id": str(uuid5(UUID(str(thread_id)), agent.name)) if thread_id else None},
             )
-        
+
         # Check if we're in a streaming context and the agent supports streaming
         stream_writer = get_stream_writer()
-        if stream_writer and hasattr(agent, 'astream'):
+        if stream_writer is not None and hasattr(agent, "astream"):
             try:
                 collected_messages = []
                 collected_values = None
-                
+
                 # Detect the stream mode from the parent context
                 # Since LangGraph doesn't expose stream_mode in config yet, we need to
                 # stream all possible modes to ensure we don't miss what the parent wants
                 # The parent will filter based on what it requested
-                stream_modes = ["values", "updates", "custom", "messages", "debug"]
-                
+                stream_modes: list[Literal["values", "updates", "debug", "messages", "custom"]] = [
+                    "values", "updates", "custom", "messages", "debug"
+                ]
+
                 # Stream from the agent with all modes
-                async for chunk in agent.astream(
-                    state, 
-                    config,
-                    stream_mode=stream_modes
-                ):
+                async for chunk in agent.astream(state, config, stream_mode=stream_modes):
                     # Handle tuple format from multi-mode streaming
                     if isinstance(chunk, tuple) and len(chunk) == 2:
                         mode, data = chunk
-                        
+
                         if mode == "custom":
                             # Forward custom events with agent context
                             event_data = data.copy() if isinstance(data, dict) else {"data": data}
                             event_data["agent"] = agent.name
                             stream_writer(event_data)
-                        
+
                         elif mode == "updates":
                             # Collect messages from update chunks
                             if isinstance(data, dict):
-                                for key, value in data.items():
+                                for _key, value in data.items():
                                     if isinstance(value, dict) and "messages" in value:
                                         collected_messages.extend(value["messages"])
-                        
+
                         elif mode == "values":
                             # Keep the latest full state
                             if isinstance(data, dict) and "messages" in data:
                                 collected_values = data
-                        
+
                         elif mode == "messages":
                             # Forward LLM token streaming with agent context
                             if isinstance(data, tuple) and len(data) == 2:
                                 token, metadata = data
                                 # Add agent identification to metadata
-                                enhanced_metadata = metadata.copy() if isinstance(metadata, dict) else {}
+                                enhanced_metadata = (
+                                    metadata.copy() if isinstance(metadata, dict) else {}
+                                )
                                 enhanced_metadata["agent"] = agent.name
                                 # Forward as a custom event with special structure for messages
-                                stream_writer({
-                                    "type": "agent_llm_token",
-                                    "agent": agent.name,
-                                    "token": token,
-                                    "metadata": enhanced_metadata
-                                })
-                        
+                                stream_writer(
+                                    {
+                                        "type": "agent_llm_token",
+                                        "agent": agent.name,
+                                        "token": token,
+                                        "metadata": enhanced_metadata,
+                                    }
+                                )
+
                         elif mode == "debug":
                             # Forward debug information with agent context
                             debug_data = data.copy() if isinstance(data, dict) else {"data": data}
                             debug_data["agent"] = agent.name
                             debug_data["type"] = "agent_debug"
                             stream_writer(debug_data)
-                    
+
                     # Handle single mode streaming (backward compatibility)
                     elif isinstance(chunk, dict):
                         # This is likely updates mode in single-mode streaming
-                        for key, value in chunk.items():
+                        for _key, value in chunk.items():
                             if isinstance(value, dict) and "messages" in value:
                                 collected_messages.extend(value["messages"])
-                
+
                 # Process collected output - prefer values if available, otherwise use updates
                 if collected_values and "messages" in collected_values:
                     output = {"messages": collected_values["messages"]}
@@ -196,14 +198,14 @@ def _make_call_agent(
                 else:
                     # If no messages collected, fall back to ainvoke
                     output = await agent.ainvoke(state, config)
-                
+
                 return _process_output(output)
-                    
+
             except Exception:
                 # Silently fall back to ainvoke if streaming fails
                 # This ensures backward compatibility and robustness
                 pass
-        
+
         # Fall back to regular ainvoke (original behavior)
         # This path is used when:
         # 1. Not in a streaming context (no stream_writer)
@@ -417,26 +419,6 @@ def create_supervisor(
             - `"inline"`: Add the agent name directly into the content field of the AI message using XML-style tags.
                 Example: `"How can I help you"` -> `"<name>agent_name</name><content>How can I help you?</content>"`
 
-    Notes:
-        Streaming Support:
-            When the supervisor is used with async streaming (`.astream()`), it automatically
-            forwards streaming data from sub-agents:
-            
-            Custom Events (stream_mode="custom"):
-            - Events from sub-agents include an "agent" field for identification
-            - LLM tokens are wrapped as {"type": "agent_llm_token", "agent": name, "token": ..., "metadata": ...}
-            - Debug info is wrapped as {"type": "agent_debug", "agent": name, ...}
-            
-            The supervisor requests all stream modes from sub-agents to ensure it captures
-            whatever the parent requested. The parent's original stream_mode filters the output.
-            
-            Requirements:
-            1. The supervisor must be called with `.astream()` (not `.invoke()`)
-            2. Sub-agents must support streaming (have an `.astream()` method)
-            
-            If streaming is not available or fails, the supervisor gracefully falls back to
-            standard invocation, maintaining full backward compatibility.
-
     Example:
         ```python
         from langchain_openai import ChatOpenAI
@@ -482,16 +464,6 @@ def create_supervisor(
                 }
             ]
         })
-        
-        # Stream with custom events (async mode)
-        async for chunk in app.astream(
-            {"messages": [{"role": "user", "content": "analyze market trends"}]},
-            stream_mode=["updates", "custom"]
-        ):
-            if isinstance(chunk, tuple) and chunk[0] == "custom":
-                # Custom events from sub-agents will include agent identification
-                print(f"Custom event from {chunk[1].get('agent')}: {chunk[1]}")
-        ```
     """
     if add_handoff_back_messages is None:
         add_handoff_back_messages = add_handoff_messages
