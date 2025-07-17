@@ -57,7 +57,7 @@ def _supports_disable_parallel_tool_calls(model: LanguageModelLike) -> bool:
 
 
 def _make_call_agent(
-    agent: Pregel,
+    agent: Pregel[Any],
     output_mode: OutputMode,
     add_handoff_back_messages: bool,
     supervisor_name: str,
@@ -181,7 +181,7 @@ def _prepare_tool_node(
         if input_tool_node is not None:
             tool_node = ToolNode(
                 all_tools,
-                name=input_tool_node.name,
+                name=str(input_tool_node.name),
                 tags=list(input_tool_node.tags) if input_tool_node.tags else None,
                 handle_tool_errors=input_tool_node.handle_tool_errors,
                 messages_key=input_tool_node.messages_key,

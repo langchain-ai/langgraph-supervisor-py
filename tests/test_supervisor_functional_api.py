@@ -1,4 +1,5 @@
 """Tests for the supervisor module using functional API."""
+# mypy: ignore-errors
 
 from typing import Any, Dict, List
 

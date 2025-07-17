@@ -1,4 +1,5 @@
 """Tests for the supervisor module."""
+# mypy: ignore-errors
 
 from collections.abc import Callable, Sequence
 from typing import Any, Optional, cast
