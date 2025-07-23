@@ -371,7 +371,7 @@ def create_supervisor(
     if add_handoff_back_messages is None:
         add_handoff_back_messages = add_handoff_messages
 
-    agent_schema = state_schema or (
+    supervisor_schema = state_schema or (
         AgentStateWithStructuredResponse if response_format is not None else AgentState
     )
     workflow_schema = state_schema or _OuterState
@@ -415,7 +415,7 @@ def create_supervisor(
         model=model,
         tools=tool_node,
         prompt=prompt,
-        state_schema=agent_schema,
+        state_schema=supervisor_schema,
         response_format=response_format,
         pre_model_hook=pre_model_hook,
         post_model_hook=post_model_hook,
