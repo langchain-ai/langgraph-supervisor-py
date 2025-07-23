@@ -15,7 +15,7 @@ readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
     "langgraph>=0.3.5",
-    "langgraph-prebuilt>=0.1.7",
+    "langgraph-prebuilt>=0.2.0",
     "langchain-core>=0.3.40"
 ]
 
@@ -60,3 +60,10 @@ warn_return_any = true
 warn_unused_configs = true
 disallow_untyped_defs = true
 check_untyped_defs = true
+
+[tool.ty.rules]
+no-matching-overload = "ignore" 
+call-non-callable = "ignore"
+unresolved-import = "ignore"
+[tool.ty.src]
+exclude = ["tests"]

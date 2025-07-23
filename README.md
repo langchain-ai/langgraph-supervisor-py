@@ -229,6 +229,7 @@ from langchain_core.tools import tool, BaseTool, InjectedToolCallId
 from langchain_core.messages import ToolMessage
 from langgraph.types import Command
 from langgraph.prebuilt import InjectedState
+from langgraph_supervisor.handoff import METADATA_KEY_HANDOFF_DESTINATION
 
 def create_custom_handoff_tool(*, agent_name: str, name: str | None, description: str | None) -> BaseTool:
 
@@ -261,6 +262,7 @@ def create_custom_handoff_tool(*, agent_name: str, name: str | None, description
             },
         )
 
+    handoff_to_agent.metadata = {METADATA_KEY_HANDOFF_DESTINATION: agent_name}
     return handoff_to_agent
 ```
 
