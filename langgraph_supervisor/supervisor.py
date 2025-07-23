@@ -3,7 +3,7 @@ from typing import Any, Callable, Literal, Optional, Sequence, Type, Union, cast
 from uuid import UUID, uuid5
 
 from langchain_core.language_models import BaseChatModel, LanguageModelLike
-from langchain_core.messages import BaseMessage
+from langchain_core.messages import AnyMessage
 from langchain_core.runnables import RunnableConfig
 from langchain_core.tools import BaseTool
 from langgraph.graph import END, START, StateGraph
@@ -198,7 +198,7 @@ def _prepare_tool_node(
 class _OuterState(TypedDict):
     """The state of the supervisor workflow."""
 
-    messages: Annotated[Sequence[BaseMessage], add_messages]
+    messages: Annotated[Sequence[AnyMessage], add_messages]
 
 
 def create_supervisor(
