@@ -14,7 +14,8 @@ license-files = ["LICENSE"]
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
-    "langgraph>=0.6.0a1,<0.7.0",
+    # pinned for testing purposes, will bound to 0.6.0 for merge
+    "langgraph==0.6.0a2",
     "langchain-core>=0.3.40"
 ]
 
@@ -66,3 +67,6 @@ call-non-callable = "ignore"
 unresolved-import = "ignore"
 [tool.ty.src]
 exclude = ["tests"]
+
+[tool.uv]
+prerelease = "allow"
