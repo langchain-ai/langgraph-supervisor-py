@@ -1,6 +1,7 @@
 import inspect
 from typing import Any, Callable, Literal, Optional, Sequence, Type, Union, cast, get_args
 from uuid import UUID, uuid5
+from warnings import warn
 
 from langchain_core.language_models import BaseChatModel, LanguageModelLike
 from langchain_core.messages import AnyMessage, ToolMessage
@@ -20,9 +21,10 @@ from langgraph.prebuilt.chat_agent_executor import (
 )
 from langgraph.pregel import Pregel
 from langgraph.pregel.remote import RemoteGraph
-from langgraph.utils.config import patch_configurable
-from langgraph.utils.runnable import RunnableCallable, RunnableLike
-from typing_extensions import Annotated, TypedDict
+from langgraph._internal._config import patch_configurable
+from langgraph._internal._runnable import RunnableCallable, RunnableLike
+from langgraph._internal._typing import DeprecatedKwargs
+from typing_extensions import Annotated, TypedDict, Unpack
 
 from langgraph_supervisor.agent_name import AgentNameMode, with_agent_name
 from langgraph_supervisor.handoff import (
@@ -47,7 +49,7 @@ def _supports_disable_parallel_tool_calls(model: LanguageModelLike) -> bool:
     if not isinstance(model, BaseChatModel):
         return False
 
-    if hasattr(model, "model_name") and model.model_name in MODELS_NO_PARALLEL_TOOL_CALLS:
+    if (model_name := getattr(model, "model_name", None)) and model_name in MODELS_NO_PARALLEL_TOOL_CALLS:
         return False
 
     if not hasattr(model, "bind_tools"):
@@ -95,7 +97,7 @@ def _make_call_agent(
         }
 
     def call_agent(state: dict, config: RunnableConfig) -> dict:
-        thread_id = config["configurable"].get("thread_id")
+        thread_id = config.get("configurable", {}).get("thread_id")
         output = agent.invoke(
             state,
             patch_configurable(
@@ -108,7 +110,7 @@ def _make_call_agent(
         return _process_output(output)
 
     async def acall_agent(state: dict, config: RunnableConfig) -> dict:
-        thread_id = config["configurable"].get("thread_id")
+        thread_id = config.get("configurable", {}).get("thread_id")
         output = await agent.ainvoke(
             state,
             patch_configurable(
@@ -217,13 +219,14 @@ def create_supervisor(
     post_model_hook: Optional[RunnableLike] = None,
     parallel_tool_calls: bool = False,
     state_schema: StateSchemaType | None = None,
-    config_schema: Type[Any] | None = None,
+    context_schema: Type[Any] | None = None,
     output_mode: OutputMode = "last_message",
     add_handoff_messages: bool = True,
     handoff_tool_prefix: Optional[str] = None,
     add_handoff_back_messages: Optional[bool] = None,
     supervisor_name: str = "supervisor",
     include_agent_name: AgentNameMode | None = None,
+    **deprecated_kwargs: Unpack[DeprecatedKwargs],
 ) -> StateGraph:
     """Create a multi-agent supervisor.
 
@@ -291,9 +294,6 @@ def create_supervisor(
         post_model_hook: An optional node to add after the LLM node in the supervisor agent (i.e., the node that calls the LLM).
             Useful for implementing human-in-the-loop, guardrails, validation, or other post-processing.
             Post-model hook must be a callable or a runnable that takes in current graph state and returns a state update.
-
-            !!! Note
-                Only available with `langgraph-prebuilt>=0.2.0`.
         parallel_tool_calls: Whether to allow the supervisor LLM to call tools in parallel (only OpenAI and Anthropic).
             Use this to control whether the supervisor can hand off to multiple agents at once.
             If True, will enable parallel tool calls.
@@ -303,8 +303,7 @@ def create_supervisor(
                 This is currently supported only by OpenAI and Anthropic models.
                 To control parallel tool calling for other providers, add explicit instructions for tool use to the system prompt.
         state_schema: State schema to use for the supervisor graph.
-        config_schema: An optional schema for configuration.
-            Use this to expose configurable parameters via `supervisor.config_specs`.
+        context_schema: Specifies the schema for the context object that will be passed to the workflow.
         output_mode: Mode for adding managed agents' outputs to the message history in the multi-agent workflow.
             Can be one of:
 
@@ -371,6 +370,14 @@ def create_supervisor(
         })
         ```
     """
+    if (config_schema := deprecated_kwargs.get("config_schema", None)) is not None:
+        warn(
+            "`config_schema` is deprecated. Please use `context_schema` instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        context_schema = config_schema
+
     if add_handoff_back_messages is None:
         add_handoff_back_messages = add_handoff_messages
 
@@ -424,7 +431,7 @@ def create_supervisor(
         post_model_hook=post_model_hook,
     )
 
-    builder = StateGraph(workflow_schema, config_schema=config_schema)
+    builder = StateGraph(workflow_schema, context_schema=context_schema)
     builder.add_node(supervisor_agent, destinations=tuple(agent_names) + (END,))
     builder.add_edge(START, supervisor_agent.name)
     for agent in agents:
