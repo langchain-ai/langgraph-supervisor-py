@@ -14,7 +14,7 @@ license-files = ["LICENSE"]
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
-    "langgraph>=0.6.0,<0.7.0",
+    "langgraph>=0.6.0a1,<0.7.0",
     "langchain-core>=0.3.40"
 ]
 

@@ -7,6 +7,9 @@ from langchain_core.language_models import BaseChatModel, LanguageModelLike
 from langchain_core.messages import AnyMessage, ToolMessage
 from langchain_core.runnables import RunnableConfig
 from langchain_core.tools import BaseTool
+from langgraph._internal._config import patch_configurable
+from langgraph._internal._runnable import RunnableCallable, RunnableLike
+from langgraph._internal._typing import DeprecatedKwargs
 from langgraph.graph import END, START, StateGraph
 from langgraph.graph.message import add_messages
 from langgraph.prebuilt import ToolNode
@@ -21,9 +24,6 @@ from langgraph.prebuilt.chat_agent_executor import (
 )
 from langgraph.pregel import Pregel
 from langgraph.pregel.remote import RemoteGraph
-from langgraph._internal._config import patch_configurable
-from langgraph._internal._runnable import RunnableCallable, RunnableLike
-from langgraph._internal._typing import DeprecatedKwargs
 from typing_extensions import Annotated, TypedDict, Unpack
 
 from langgraph_supervisor.agent_name import AgentNameMode, with_agent_name
@@ -49,7 +49,9 @@ def _supports_disable_parallel_tool_calls(model: LanguageModelLike) -> bool:
     if not isinstance(model, BaseChatModel):
         return False
 
-    if (model_name := getattr(model, "model_name", None)) and model_name in MODELS_NO_PARALLEL_TOOL_CALLS:
+    if (
+        model_name := getattr(model, "model_name", None)
+    ) and model_name in MODELS_NO_PARALLEL_TOOL_CALLS:
         return False
 
     if not hasattr(model, "bind_tools"):
