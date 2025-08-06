@@ -1,4 +1,5 @@
 import inspect
+from types import NoneType
 from typing import Any, Callable, Literal, Optional, Sequence, Type, Union, cast, get_args
 from uuid import UUID, uuid5
 from warnings import warn
@@ -212,7 +213,7 @@ def create_supervisor(
     agents: list[Pregel],
     *,
     model: LanguageModelLike,
-    tools: list[BaseTool | Callable] | ToolNode | None = None,
+    tools: list[BaseTool | Callable | dict] | ToolNode | None = None,
     prompt: Prompt | None = None,
     response_format: Optional[
         Union[StructuredResponseSchema, tuple[str, StructuredResponseSchema]]
@@ -403,15 +404,23 @@ def create_supervisor(
 
         agent_names.add(agent.name)
 
+    llm_builtin_tools = []
+    non_builtin_tools = tools
+    if not isinstance(tools, (ToolNode, NoneType)):
+        llm_builtin_tools = [t for t in tools if isinstance(t, dict)]
+        non_builtin_tools = [
+            t for t in tools if t not in llm_builtin_tools
+        ]
+
     tool_node = _prepare_tool_node(
-        tools,
+        non_builtin_tools,
         handoff_tool_prefix,
         add_handoff_messages,
         agent_names,
     )
     all_tools = list(tool_node.tools_by_name.values())
 
-    if _should_bind_tools(model, all_tools):
+    if _should_bind_tools(model, all_tools, len(llm_builtin_tools)):
         if _supports_disable_parallel_tool_calls(model):
             model = cast(BaseChatModel, model).bind_tools(
                 all_tools, parallel_tool_calls=parallel_tool_calls
