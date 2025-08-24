@@ -434,7 +434,7 @@ def create_supervisor(
     )
 
     builder = StateGraph(workflow_schema, context_schema=context_schema)
-    builder.add_node(supervisor_agent, destinations=tuple(agent_names) + (END,))
+    builder.add_node(supervisor_agent, destinations=tuple(agent_names))
     builder.add_edge(START, supervisor_agent.name)
     for agent in agents:
         builder.add_node(
@@ -447,5 +447,6 @@ def create_supervisor(
             ),
         )
         builder.add_edge(agent.name, supervisor_agent.name)
+    builder.add_edge(supervisor_name, END)
 
     return builder
