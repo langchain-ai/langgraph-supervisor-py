@@ -147,7 +147,7 @@ def _prepare_tool_node(
     tools: list[BaseTool | Callable] | ToolNode | None,
     handoff_tool_prefix: Optional[str],
     add_handoff_messages: bool,
-    agent_names: set[str],
+    agent_names: list[str],
 ) -> ToolNode:
     """Prepare the ToolNode to use in supervisor agent."""
     if isinstance(tools, ToolNode):
@@ -388,7 +388,9 @@ def create_supervisor(
     )
     workflow_schema = state_schema or _OuterState
 
-    agent_names = set()
+    agent_names = []
+    _agent_names_seen = set()
+
     for agent in agents:
         if agent.name is None or agent.name == "LangGraph":
             raise ValueError(
@@ -396,12 +398,13 @@ def create_supervisor(
                 "or via `graph.compile(name=name)`."
             )
 
-        if agent.name in agent_names:
+        if agent.name in _agent_names_seen:
             raise ValueError(
                 f"Agent with name '{agent.name}' already exists. Agent names must be unique."
             )
 
-        agent_names.add(agent.name)
+        _agent_names_seen.add(agent.name)
+        agent_names.append(agent.name)
 
     tool_node = _prepare_tool_node(
         tools,
