@@ -1,5 +1,5 @@
 version = 1
-revision = 2
+revision = 3
 requires-python = ">=3.10"
 
 [[package]]
@@ -331,6 +331,7 @@ source = { editable = "." }
 dependencies = [
     { name = "langchain-core" },
     { name = "langgraph" },
+    { name = "pytest" },
 ]
 
 [package.dev-dependencies]
@@ -346,6 +347,7 @@ test = [
 requires-dist = [
     { name = "langchain-core", specifier = ">=0.3.40" },
     { name = "langgraph", specifier = ">=0.6.0,<0.7.0" },
+    { name = "pytest", specifier = ">=8.4.1" },
 ]
 
 [package.metadata.requires-dev]

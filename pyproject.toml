@@ -15,7 +15,8 @@ readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
     "langgraph>=0.6.0,<0.7.0",
-    "langchain-core>=0.3.40"
+    "langchain-core>=0.3.40",
+    "pytest>=8.4.1",
 ]
 
 [dependency-groups]
