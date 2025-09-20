@@ -26,8 +26,8 @@ from langgraph.pregel import Pregel
 from langgraph.pregel.remote import RemoteGraph
 from typing_extensions import Annotated, TypedDict, Unpack
 
-from whats_eat.langgraph_supervisior.agent_name import AgentNameMode, with_agent_name
-from whats_eat.langgraph_supervisior.handoff import (
+from whats_eat.langgraph_supervisor.agent_name import AgentNameMode, with_agent_name
+from whats_eat.langgraph_supervisor.handoff import (
     METADATA_KEY_HANDOFF_DESTINATION,
     _normalize_agent_name,
     create_handoff_back_messages,
