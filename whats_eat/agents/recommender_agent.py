@@ -1,7 +1,7 @@
 
 from langgraph.prebuilt import create_react_agent
 from langchain.chat_models import init_chat_model
-from tools.ranking import rank_restaurants
+from whats_eat.tools.ranking import rank_restaurants
 
 def build_recommender_agent():
     return create_react_agent(

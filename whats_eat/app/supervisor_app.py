@@ -1,11 +1,11 @@
 # app/supervisor_app.py
 from langchain.chat_models import init_chat_model
-from langgraph_supervisor import create_supervisor, create_forward_message_tool  # your package
+from whats_eat.langgraph_supervisor import create_supervisor, create_forward_message_tool  # your package
 
-from agents.places_agent import build_places_agent
-from agents.youtube_agent import build_youtube_agent
-from agents.recommender_agent import build_recommender_agent
-from agents.summarizer_agent import build_summarizer_agent
+from whats_eat.agents.places_agent import build_places_agent
+from whats_eat.agents.youtube_agent import build_youtube_agent
+from whats_eat.agents.recommender_agent import build_recommender_agent
+from whats_eat.agents.summarizer_agent import build_summarizer_agent
 
 def build_app():
     places = build_places_agent()

@@ -1,5 +1,5 @@
 # app/run.py
-from app.supervisor_app import build_app
+from whats_eat.app.supervisor_app import build_app
 
 if __name__ == "__main__":
     app = build_app()

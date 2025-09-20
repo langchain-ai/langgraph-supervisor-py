@@ -1,7 +1,7 @@
 # agents/places_agent.py
 from langgraph.prebuilt import create_react_agent
 from langchain.chat_models import init_chat_model
-from tools.google_places import places_text_search, places_fetch_photos
+from whats_eat.tools.google_places import places_text_search, places_fetch_photos
 
 def build_places_agent():
     return create_react_agent(
