@@ -14,9 +14,9 @@ from langchain_core.tools import BaseTool, tool
 from langgraph.graph import MessagesState, StateGraph
 from langgraph.prebuilt import create_react_agent
 
-from langgraph_supervisor import create_supervisor
-from langgraph_supervisor.agent_name import AgentNameMode, with_agent_name
-from langgraph_supervisor.handoff import create_forward_message_tool
+from whats_eat import create_supervisor
+from whats_eat import AgentNameMode, with_agent_name
+from whats_eat import create_forward_message_tool
 
 
 class FakeChatModel(BaseChatModel):

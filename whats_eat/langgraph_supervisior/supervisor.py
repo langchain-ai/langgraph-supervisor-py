@@ -26,8 +26,8 @@ from langgraph.pregel import Pregel
 from langgraph.pregel.remote import RemoteGraph
 from typing_extensions import Annotated, TypedDict, Unpack
 
-from langgraph_supervisor.agent_name import AgentNameMode, with_agent_name
-from langgraph_supervisor.handoff import (
+from whats_eat.langgraph_supervisior.agent_name import AgentNameMode, with_agent_name
+from whats_eat.langgraph_supervisior.handoff import (
     METADATA_KEY_HANDOFF_DESTINATION,
     _normalize_agent_name,
     create_handoff_back_messages,
@@ -329,7 +329,7 @@ def create_supervisor(
         ```python
         from langchain_openai import ChatOpenAI
 
-        from langgraph_supervisor import create_supervisor
+        from whats_eat import create_supervisor
         from langgraph.prebuilt import create_react_agent
 
         # Create specialized agents

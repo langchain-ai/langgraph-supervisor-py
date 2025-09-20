@@ -34,10 +34,11 @@ export OPENAI_API_KEY=<your_api_key>
 ```python
 from langchain_openai import ChatOpenAI
 
-from langgraph_supervisor import create_supervisor
+from whats_eat import create_supervisor
 from langgraph.prebuilt import create_react_agent
 
 model = ChatOpenAI(model="gpt-4o")
+
 
 # Create specialized agents
 
@@ -45,9 +46,11 @@ def add(a: float, b: float) -> float:
     """Add two numbers."""
     return a + b
 
+
 def multiply(a: float, b: float) -> float:
     """Multiply two numbers."""
     return a * b
+
 
 def web_search(query: str) -> str:
     """Search the web for information."""
@@ -59,6 +62,7 @@ def web_search(query: str) -> str:
         "4. **Netflix**: 14,000 employees.\n"
         "5. **Google (Alphabet)**: 181,269 employees."
     )
+
 
 math_agent = create_react_agent(
     model=model,
@@ -188,12 +192,15 @@ By default, the supervisor uses handoff tools created with the prebuilt `create_
 Here is an example of how to pass customized handoff tools to `create_supervisor`:
 
 ```python
-from langgraph_supervisor import create_handoff_tool
+from whats_eat import create_handoff_tool
+
 workflow = create_supervisor(
     [research_agent, math_agent],
     tools=[
-        create_handoff_tool(agent_name="math_expert", name="assign_to_math_expert", description="Assign task to math expert"),
-        create_handoff_tool(agent_name="research_expert", name="assign_to_research_expert", description="Assign task to research expert")
+        create_handoff_tool(agent_name="math_expert", name="assign_to_math_expert",
+                            description="Assign task to math expert"),
+        create_handoff_tool(agent_name="research_expert", name="assign_to_research_expert",
+                            description="Assign task to research expert")
     ],
     model=model,
 )
@@ -229,18 +236,19 @@ from langchain_core.tools import tool, BaseTool, InjectedToolCallId
 from langchain_core.messages import ToolMessage
 from langgraph.types import Command
 from langgraph.prebuilt import InjectedState
-from langgraph_supervisor.handoff import METADATA_KEY_HANDOFF_DESTINATION
+from whats_eat import METADATA_KEY_HANDOFF_DESTINATION
+
 
 def create_custom_handoff_tool(*, agent_name: str, name: str | None, description: str | None) -> BaseTool:
-
     @tool(name, description=description)
     def handoff_to_agent(
-        # you can add additional tool call arguments for the LLM to populate
-        # for example, you can ask the LLM to populate a task description for the next agent
-        task_description: Annotated[str, "Detailed description of what the next agent should do, including all of the relevant context."],
-        # you can inject the state of the agent that is calling the tool
-        state: Annotated[dict, InjectedState],
-        tool_call_id: Annotated[str, InjectedToolCallId],
+            # you can add additional tool call arguments for the LLM to populate
+            # for example, you can ask the LLM to populate a task description for the next agent
+            task_description: Annotated[
+                str, "Detailed description of what the next agent should do, including all of the relevant context."],
+            # you can inject the state of the agent that is calling the tool
+            state: Annotated[dict, InjectedState],
+            tool_call_id: Annotated[str, InjectedToolCallId],
     ):
         tool_message = ToolMessage(
             content=f"Successfully transferred to {agent_name}",
@@ -271,11 +279,12 @@ def create_custom_handoff_tool(*, agent_name: str, name: str | None, description
 You can equip the supervisor with a tool to directly forward the last message received from a worker agent straight to the final output of the graph using `create_forward_message_tool`. This is useful when the supervisor determines that the worker's response is sufficient and doesn't require further processing or summarization by the supervisor itself. It saves tokens for the supervisor and avoids potential misrepresentation of the worker's response through paraphrasing.
 
 ```python
-from langgraph_supervisor.handoff import create_forward_message_tool
+from whats_eat import create_forward_message_tool
 
 # Assume research_agent and math_agent are defined as before
 
-forwarding_tool = create_forward_message_tool("supervisor") # The argument is the name to assign to the resulting forwarded message
+forwarding_tool = create_forward_message_tool(
+    "supervisor")  # The argument is the name to assign to the resulting forwarded message
 workflow = create_supervisor(
     [research_agent, math_agent],
     model=model,
@@ -298,7 +307,7 @@ export OPENAI_API_KEY=<your_api_key>
 
 ```python
 from langgraph.prebuilt import create_react_agent
-from langgraph_supervisor import create_supervisor
+from whats_eat import create_supervisor
 
 from langchain_openai import ChatOpenAI
 
@@ -307,6 +316,7 @@ from langgraph.graph import add_messages
 
 model = ChatOpenAI(model="gpt-4o")
 
+
 # Create specialized agents
 
 # Functional API - Agent 1 (Joke Generator)
@@ -314,7 +324,7 @@ model = ChatOpenAI(model="gpt-4o")
 def generate_joke(messages):
     """First LLM call to generate initial joke"""
     system_message = {
-        "role": "system", 
+        "role": "system",
         "content": "Write a short joke"
     }
     msg = model.invoke(
@@ -322,13 +332,16 @@ def generate_joke(messages):
     )
     return msg
 
+
 @entrypoint()
 def joke_agent(state):
     joke = generate_joke(state['messages']).result()
     messages = add_messages(state["messages"], [joke])
     return {"messages": messages}
 
+
 joke_agent.name = "joke_agent"
+
 
 # Graph API - Agent 2 (Research Expert)
 def web_search(query: str) -> str:
@@ -341,6 +354,7 @@ def web_search(query: str) -> str:
         "4. **Netflix**: 14,000 employees.\n"
         "5. **Google (Alphabet)**: 181,269 employees."
     )
+
 
 research_agent = create_react_agent(
     model=model,

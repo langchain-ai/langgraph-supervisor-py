@@ -8,7 +8,7 @@ from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, System
 from langgraph.func import entrypoint, task
 from langgraph.graph import add_messages
 
-from langgraph_supervisor import create_supervisor
+from whats_eat import create_supervisor
 
 
 class FakeModel(GenericFakeChatModel):

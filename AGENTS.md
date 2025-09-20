@@ -1,235 +1,465 @@
-# AGENTS.md — Supervisor-based Multi-Agent Design (WhatsEat)
+# AGENTS.md — WhatsEat Supervisor-based Multi-Agent (Aligned with `langgraph_supervisor` style)
 
-> This document guides **code generation** (and reviewers) to implement our supervisor-orchestrated agent system with LangGraph. It specifies agent roles, tool contracts, handoff rules, shared state, prompts, wiring, and validation checks. The design follows LangGraph’s **supervisor + handoff tools** pattern and **prebuilt ReAct agents** for worker nodes. [LangChain AI+2LangChain AI+2](https://langchain-ai.github.io/langgraph/tutorials/multi_agent/agent_supervisor/?utm_source=chatgpt.com)
-
-------
-
-## 1) High-level topology
-
-- **Supervisor**: routes work, one agent at a time; never calls external APIs directly. Uses **handoff tools** to pass control and a minimal task payload to workers. [LangChain AI+1](https://langchain-ai.github.io/langgraph/tutorials/multi_agent/agent_supervisor/?utm_source=chatgpt.com)
-- **Workers (prebuilt agents)**: `create_react_agent` with small, stable toolboxes. They use tools in a loop until done, then return a compact JSON. [LangChain AI](https://langchain-ai.github.io/langgraph/reference/agents/?utm_source=chatgpt.com)
-- **Tools**: Python callables wrapped with `@tool` (Pydantic `args_schema`). Keep inputs/outputs **small and structured**; never dump raw API payloads. [LangChain+2LangChain+2](https://python.langchain.com/docs/how_to/custom_tools/?utm_source=chatgpt.com)
-
-Sequence (baseline, serial): **UIA → UPA → RPA → PFA → EEA → user**. Parallel/conditional branches can be added later. [LangChain AI](https://langchain-ai.github.io/langgraph/tutorials/multi_agent/agent_supervisor/?utm_source=chatgpt.com)
+> This document is an **implementation guide + code conventions**. Requirements: **reuse** the existing capabilities in your fork’s `langgraph_supervisor/` (`create_supervisor`, `create_handoff_tool`, `create_forward_message_tool`, message and state types, etc.), **keep the same code style and naming habits**, and provide **clearly readable** directory and file names.  
+> Convention: This document treats **`langgraph_supervisor`** in the repo as the authoritative package name (if historical docs contain the misspelling `langgraph_supervisior`, this file takes precedence).
 
 ------
 
-## 2) Shared state & data contracts
+## 0. Code style and naming conventions (consistent with `langgraph_supervisor`)
 
-We extend LangGraph’s `MessagesState` with project fields. Workers read/write only what they need; Supervisor owns routing.
+- **Naming**
+  - Directories & files: `snake_case`, e.g., `places_agent.py`, `fetch_place_photos.py`.
+  - Tool functions (tool names): `snake_case`, with a clear verb at the start: `place_text_search`, `build_gmaps_deeplink`.
+  - Pydantic models: `PascalCase`, e.g., `QuerySpec`, `UserTasteProfile`.
+  - Agent constructors: `build_<role>_agent()`.
+- **Types & comments**
+  - Full **type hints**; module-level docstrings briefly explain inputs/outputs.
+  - Pydantic v2 (`BaseModel`) defines tool input parameters and cross-agent state objects.
+- **I/O constraints**
+  - Tools return **small and stable** JSON/models; do not pass through large raw payloads from third-party APIs.
+  - Network tools must have `timeout` and **at most 2 exponential backoff retries**, and degrade behavior for 429/5xx.
+- **Structured state**
+  - Only put **structured objects** into `state`. Supervisor uses `output_mode="last_message"` to avoid bloated chat text.
+
+------
+
+## 1. Directory structure (at the fork’s root)
 
 ```
-State = {
-  "messages": [...],                            # LangGraph native
-  "query_spec": QuerySpec | None,               # UIA output
-  "user_profile": UserTasteProfile | None,      # UPA output (long/short term)
-  "candidates": list[RestaurantDoc] | None,     # RPA output
-  "ranked": RankedList | None,                  # PFA output
-  "evidence": dict[str, Evidence] | None,       # EEA output by place_id
-  "audit": list[AuditEvent],                    # scoring & routing snapshots
+langgraph-supervisor-py/
+├─ langgraph_supervisor/                 # Keep as-is (do not modify public APIs)
+│  └─ ... (create_supervisor, create_handoff_tool, etc.)
+├─ apps/whatseat/
+│  ├─ agents/
+│  │  ├─ uia_agent.py                    # User-Intent Agent
+│  │  ├─ upa_agent.py                    # User Profile Agent
+│  │  ├─ rpa_agent.py                    # Restaurant Profile Agent
+│  │  ├─ pfa_agent.py                    # Preference Fusion Agent
+│  │  └─ eea_agent.py                    # Evidence & Enrichment Agent
+│  ├─ tools/
+│  │  ├─ places.py                       # Places/TextSearch/Details/Deeplink
+│  │  ├─ photos.py                       # Photos CDN URL
+│  │  ├─ youtube.py                      # YouTube history & topics
+│  │  ├─ scoring.py                      # Ranking / multi-objective fusion
+│  │  ├─ kg.py                           # ER extraction & KG upsert (placeholder; can be added later)
+│  │  └─ vector.py                       # Vectorization and ingestion (placeholder; can be added later)
+│  ├─ supervisor/
+│  │  ├─ prompt.py                       # Supervisor routing rules
+│  │  └─ workflow.py                     # create_supervisor + handoff definitions
+│  ├─ schemas.py                         # State & contract models (Pydantic)
+│  ├─ config.py                          # Constants / env vars / retry strategy
+│  ├─ run_demo.py                        # End-to-end example
+│  └─ tests/                             # Unit & integration tests
+└─ ...
+```
+
+------
+
+## 2. Shared State and data contracts (`apps/whatseat/schemas.py`)
+
+```
+# apps/whatseat/schemas.py
+from __future__ import annotations
+from typing import List, Dict, Optional
+from pydantic import BaseModel, Field
+
+class Geo(BaseModel):
+    lat: float
+    lng: float
+    radius: Optional[float] = Field(None, description="meters")
+
+class QuerySpec(BaseModel):
+    geo: Optional[Geo] = None
+    price_band: Optional[str] = None      # "$" | "$$" | "$$$"...
+    cuisines: List[str] = []
+    diet_restrictions: List[str] = []
+    party_size: Optional[int] = None
+    time_window: Optional[str] = None     # "today 19:00-21:00"
+
+class UserTasteProfile(BaseModel):
+    cuisines: List[str] = []
+    disliked: List[str] = []
+    ambience: List[str] = []
+    spice_level: Optional[str] = None
+    price_prior: Optional[str] = None
+    history_signals: Dict[str, dict] = {} # e.g., {"yt": {...}, "gmaps_cf": {...}}
+    updated_at: Optional[str] = None
+
+class RestaurantDoc(BaseModel):
+    place_id: str
+    name: str
+    address: Optional[str] = None
+    geo: Optional[Geo] = None
+    price_level: Optional[str] = None
+    cuisine_tags: List[str] = []
+    features: List[str] = []
+    short_desc: Optional[str] = None
+    embedding_id: Optional[str] = None
+    kg_node_id: Optional[str] = None
+
+class RankedItem(BaseModel):
+    place_id: str
+    score: float
+    why: List[str] = []
+    filters_passed: List[str] = []
+    cautions: List[str] = []
+
+class RankedList(BaseModel):
+    items: List[RankedItem] = []
+    rationale: Optional[str] = None
+
+class Evidence(BaseModel):
+    photos: List[str] = []
+    opening_hours: Optional[dict] = None
+    deeplink: Optional[str] = None
+    phone: Optional[str] = None
+    website: Optional[str] = None
+
+class AuditEvent(BaseModel):
+    stage: str
+    inputs_hash: Optional[str] = None
+    outputs_hash: Optional[str] = None
+    notes: Optional[str] = None
+```
+
+> On the graph state, extend `MessagesState`: only add the following keys: `query_spec`, `user_profile`, `candidates`, `ranked`, `evidence`, `audit`.
+
+------
+
+## 3. Tools layer (`apps/whatseat/tools/*.py`)
+
+> Expose with `@tool` + `args_schema`; **network tools** uniformly use `requests`, **timeout + 2 backoff retries**; degrade for 429/5xx. Below shows the “shells” and **minimal projections**—paste your notebook implementations into the `# TODO` parts.
+
+### 3.1 Places (`apps/whatseat/tools/places.py`)
+
+```
+from typing import Optional, Dict, Any, List
+from pydantic import BaseModel, Field
+from langchain_core.tools import tool
+import os, time, requests
+
+GOOGLE_API_KEY = os.getenv("GOOGLE_MAPS_API_KEY")
+
+class TextSearchInput(BaseModel):
+    query: str
+    region_code: Optional[str] = None
+    location_bias: Optional[str] = Field(None, description="circle:2000@lat,lng")
+
+def _get(url: str, params: dict, tries: int = 3, timeout: int = 20):
+    for t in range(tries):
+        r = requests.get(url, params=params, timeout=timeout)
+        if r.status_code in (429, 500, 502, 503, 504):
+            time.sleep(2 ** t)
+            continue
+        r.raise_for_status()
+        return r
+    return r  # Return the last response; caller can decide how to handle
+
+@tool("place_text_search", args_schema=TextSearchInput)
+def place_text_search(query: str, region_code: Optional[str] = None,
+                      location_bias: Optional[str] = None) -> Dict[str, Any]:
+    assert GOOGLE_API_KEY, "Missing GOOGLE_MAPS_API_KEY"
+    url = "https://maps.googleapis.com/maps/api/place/textsearch/json"
+    params = {"query": query, "key": GOOGLE_API_KEY}
+    if region_code: params["region"] = region_code
+    if location_bias: params["locationbias"] = location_bias
+    r = _get(url, params)
+    data = r.json()
+    items = []
+    for it in data.get("results", [])[:25]:
+        items.append({
+            "place_id": it.get("place_id"),
+            "name": it.get("name"),
+            "address": it.get("formatted_address"),
+            "location": it.get("geometry", {}).get("location"),
+            "photo_refs": [p.get("photo_reference") for p in it.get("photos", [])] if it.get("photos") else []
+        })
+    return {"candidates": items}
+
+class DetailsBatchInput(BaseModel):
+    place_ids: List[str]
+
+@tool("place_details_batch", args_schema=DetailsBatchInput)
+def place_details_batch(place_ids: List[str]) -> List[Dict[str, Any]]:
+    assert GOOGLE_API_KEY, "Missing GOOGLE_MAPS_API_KEY"
+    out: List[Dict[str, Any]] = []
+    url = "https://maps.googleapis.com/maps/api/place/details/json"
+    fields = "place_id,name,formatted_address,geometry,opening_hours,website,international_phone_number,rating,user_ratings_total,photo,price_level"
+    for pid in place_ids:
+        r = _get(url, {"place_id": pid, "key": GOOGLE_API_KEY, "fields": fields})
+        res = r.json().get("result", {})
+        out.append(res)
+    return out
+
+class DeeplinkInput(BaseModel):
+    place_id: str
+    mode: str = "driving"
+    origin: Optional[str] = None
+
+@tool("build_gmaps_deeplink", args_schema=DeeplinkInput)
+def build_gmaps_deeplink(place_id: str, mode: str = "driving", origin: Optional[str] = None) -> str:
+    base = "https://www.google.com/maps/dir/?api=1"
+    dest = f"destination_place_id={place_id}"
+    mode_q = f"&travelmode={mode}"
+    ori_q = f"&origin={origin}" if origin else ""
+    return f"{base}&{dest}{mode_q}{ori_q}"
+```
+
+### 3.2 Photos (`apps/whatseat/tools/photos.py`)
+
+```
+from typing import Dict
+from pydantic import BaseModel, Field
+from langchain_core.tools import tool
+import os, requests
+
+GOOGLE_API_KEY = os.getenv("GOOGLE_MAPS_API_KEY")
+
+class PhotoInput(BaseModel):
+    photo_reference: str
+    max_w: int = Field(800, ge=1, le=1600)
+    max_h: int = Field(800, ge=1, le=1600)
+
+@tool("fetch_place_photos", args_schema=PhotoInput)
+def fetch_place_photos(photo_reference: str, max_w: int = 800, max_h: int = 800) -> Dict[str, str]:
+    assert GOOGLE_API_KEY, "Missing GOOGLE_MAPS_API_KEY"
+    url = "https://maps.googleapis.com/maps/api/place/photo"
+    params = {"photoreference": photo_reference, "maxwidth": max_w, "maxheight": max_h, "key": GOOGLE_API_KEY}
+    resp = requests.get(url, params=params, allow_redirects=False, timeout=20)
+    final_url = resp.headers.get("Location") or resp.url
+    return {"photo_url": final_url}
+```
+
+### 3.3 YouTube (`apps/whatseat/tools/youtube.py`)
+
+```
+from typing import Optional, Dict, Any, List
+from pydantic import BaseModel, Field
+from langchain_core.tools import tool
+import os
+
+YOUTUBE_API_KEY = os.getenv("YOUTUBE_API_KEY")
+
+class YTProfileInput(BaseModel):
+    user_id: Optional[str] = Field(None, description="App user id for OAuth mapping")
+    max_items: int = 50
+
+@tool("yt_fetch_history", args_schema=YTProfileInput)
+def yt_fetch_history(user_id: Optional[str] = None, max_items: int = 50) -> Dict[str, Any]:
+    assert YOUTUBE_API_KEY, "Missing YOUTUBE_API_KEY"
+    # TODO: Paste the Data API v3 implementation from your notebook; return VideoMeta[]
+    return {"videos": []}
+
+class YTInferInput(BaseModel):
+    videos: List[Dict[str, Any]]
+
+@tool("yt_topics_infer", args_schema=YTInferInput)
+def yt_topics_infer(videos: List[Dict[str, Any]]) -> Dict[str, Any]:
+    # TODO: Paste your topic/cuisine keyword extraction logic
+    return {"topic_keywords": [], "cuisine_keywords": [], "creators_top": []}
+```
+
+> Other tools: `gmaps_likes_fetch`, `item_item_cf`, `profile_merge`, `entity_relation_extract`, `kg_upsert`, `vector_embed_and_upsert`, `scoring_pipeline` can be stubbed following the same style.
+
+------
+
+## 4. Sub-agents (`apps/whatseat/agents/*.py`)
+
+> Uniformly build with `create_react_agent`; one constructor per file, named `build_<role>_agent()`. Prompts should **only state operating conventions** and **output contracts**.
+
+Example: **RPA** (Restaurant Profile Agent, `rpa_agent.py`)
+
+```
+# apps/whatseat/agents/rpa_agent.py
+from langgraph.prebuilt import create_react_agent
+from langchain_openai import ChatOpenAI
+from apps.whatseat.tools.places import place_text_search, place_details_batch
+from apps.whatseat.tools.kg import kg_upsert
+from apps.whatseat.tools.vector import vector_embed_and_upsert
+
+PROMPT = (
+    "You are the Restaurant Profile Agent.\n"
+    "- Use place_text_search to collect candidates (20-50).\n"
+    "- Use place_details_batch to fetch details.\n"
+    "- Project results to minimal RestaurantDoc fields.\n"
+    "- Upsert ER/Vector if available (best-effort). Return only compact list."
+)
+
+def build_rpa_agent():
+    return create_react_agent(
+        model=ChatOpenAI(model="gpt-4o"),
+        tools=[place_text_search, place_details_batch, kg_upsert, vector_embed_and_upsert],
+        name="restaurant_profile_agent",
+        prompt=PROMPT,
+    )
+```
+
+Others: `uia_agent.py` (only extracts `QuerySpec`), `upa_agent.py` (YouTube/CF fusion), `pfa_agent.py` (scoring), `eea_agent.py` (evidence) follow the same pattern.
+
+------
+
+## 5. Supervisor and handoff (`apps/whatseat/supervisor/workflow.py` & `prompt.py`)
+
+### 5.1 Routing prompt (`prompt.py`)
+
+```
+# apps/whatseat/supervisor/prompt.py
+SUPERVISOR_PROMPT = """
+You are the supervisor. Route one worker at a time.
+Rules:
+- Intent parsing -> UIA; user profile -> UPA; restaurant candidates -> RPA; scoring -> PFA; evidence -> EEA.
+- Do not call external APIs yourself; always delegate via handoff tools.
+- Prefer compact JSON; store structured objects in state, not in text history.
+Fallbacks:
+- If RPA candidates < 3, ask UIA to relax location/radius/price.
+- If no OAuth, skip UPA and proceed with session-only preferences.
+"""
+```
+
+### 5.2 Workflow and handoff (`workflow.py`)
+
+```
+# apps/whatseat/supervisor/workflow.py
+from __future__ import annotations
+from typing import Annotated
+from langgraph_supervisor import (
+    create_supervisor,
+    create_handoff_tool,
+    create_forward_message_tool,
+)
+from langgraph.prebuilt import create_react_agent, InjectedState
+from langgraph.graph.message import MessagesState
+from langgraph.types import Command, Send
+from langchain_openai import ChatOpenAI
+
+from apps.whatseat.agents.uia_agent import build_uia_agent
+from apps.whatseat.agents.upa_agent import build_upa_agent
+from apps.whatseat.agents.rpa_agent import build_rpa_agent
+from apps.whatseat.agents.pfa_agent import build_pfa_agent
+from apps.whatseat.agents.eea_agent import build_eea_agent
+from .prompt import SUPERVISOR_PROMPT
+
+def _handoff_to(agent_name: str, tool_name: str, description: str):
+    # Use the same handoff style as langgraph_supervisor: take a task description + inject state
+    def _factory():
+        @create_handoff_tool(agent_name=agent_name, name=tool_name, description=description)
+        def _tool(
+            task_description: Annotated[str, "What the next agent should do"],
+            state: Annotated[MessagesState, InjectedState],
+        ) -> Command:
+            # Only pass necessary fields to avoid blowing up history
+            payload = {
+                **state,
+                "messages": [{"role": "user", "content": task_description}],
+                # Structured objects to be read downstream: query_spec/user_profile/candidates/ranked/evidence
+            }
+            return Command(goto=[Send(agent_name, payload)], graph=Command.PARENT)
+        return _tool
+    return _factory()
+
+def build_workflow():
+    model = ChatOpenAI(model="gpt-4o")
+
+    agents = [
+        build_uia_agent(),
+        build_upa_agent(),
+        build_rpa_agent(),
+        build_pfa_agent(),
+        build_eea_agent(),
+    ]
+
+    handoffs = [
+        _handoff_to("user_intent_agent", "delegate_to_uia", "Extract/complete QuerySpec"),
+        _handoff_to("user_profile_agent", "delegate_to_upa", "Build UserTasteProfile"),
+        _handoff_to("restaurant_profile_agent", "delegate_to_rpa", "Collect & structure candidates"),
+        _handoff_to("preference_fusion_agent", "delegate_to_pfa", "Score & rank candidates"),
+        _handoff_to("evidence_agent", "delegate_to_eea", "Enrich Top-K with photos/hours/deeplinks"),
+        create_forward_message_tool("supervisor"),
+    ]
+
+    return create_supervisor(
+        agents=agents,
+        tools=handoffs,
+        model=model,
+        prompt=SUPERVISOR_PROMPT,
+        output_mode="last_message",
+        add_handoff_messages=True,
+        supervisor_name="supervisor",
+    )
+```
+
+------
+
+## 6. Running and memory (`apps/whatseat/run_demo.py`)
+
+```
+import uuid
+from langgraph.checkpoint.memory import InMemorySaver
+from apps.whatseat.supervisor.workflow import build_workflow
+
+if __name__ == "__main__":
+    app = build_workflow().compile(checkpointer=InMemorySaver())
+    cfg = {"configurable": {"thread_id": str(uuid.uuid4())}}
+
+    out = app.invoke(
+        {"messages": [{"role": "user",
+                       "content": "Find student-budget, heavy-flavor ramen near Changi, give 3 with images and navigation"}]},
+        config=cfg
+    )
+    for m in out["messages"]:
+        m.pretty_print()
+```
+
+------
+
+## 7. Tests and quality gates (`apps/whatseat/tests/`)
+
+- **Tool unit tests**: `test_tools_places.py`, `test_tools_photos.py`, `test_tools_youtube.py`
+  - Validate input schemas, lifecycles (429/5xx retries), and stability of output fields.
+- **Agent integration**: `test_agents_flow.py`
+  - Happy path: UIA→UPA→RPA→PFA→EEA.
+  - Degradations: no OAuth, insufficient RPA recall, missing images.
+- **End-to-end**: fix 3 query samples; assert `RankedList.items[0].score` is within a reasonable range and contains `why[]`.
+
+------
+
+## 8. Unified structure for the frontend
+
+```
+{
+  "cards": [
+    {
+      "place_id": "ChIJ...",
+      "name": "Ramen Keisuke",
+      "distance_km": 1.2,
+      "price_level": "$",
+      "tags": ["ramen","spicy","late-night"],
+      "why": ["close by","matches YouTube: ramen","budget-friendly"],
+      "photos": ["...jpg","...jpg"],
+      "opens": {"today_is_open": true, "closes_at": "23:00"},
+      "deeplink": "https://www.google.com/maps/dir/?api=1&..."
+    }
+  ],
+  "rationale": "Based on student budget and heavy-flavor preference, selected 3 from 36 candidates within 2km…"
 }
 ```
 
-**Schemas (Pydantic recommended)**
+------
 
-- `QuerySpec{ geo{lat,lng,radius}, price_band, cuisines[], diet_restrictions[], party_size, time_window }`
-- `UserTasteProfile{ cuisines[], disliked[], ambience[], spice_level?, price_prior, history_signals{yt,gmaps_cf}, updated_at }`
-- `RestaurantDoc{ place_id, name, address, geo, price_level?, cuisine_tags[], features[], text_blob, embedding_id?, kg_node_id? }`
-- `RankedList{ items:[{place_id, score, why[], filters_passed[], cautions[]}], rationale }`
-- `Evidence{ photos:[url], opening_hours, deeplink, phone?, website? }`
-- `AuditEvent{ stage, inputs_hash, outputs_hash, notes }`
+## 9. Suggested implementation order
 
-> Use `output_mode="last_message"` on the supervisor so long histories don’t bloat; store structured objects in `state` instead of chat text. [LangChain AI](https://langchain-ai.github.io/langgraph/tutorials/multi_agent/agent_supervisor/?utm_source=chatgpt.com)
+1. `places.py` + `photos.py` → `rpa_agent.py` + `eea_agent.py` → get the minimal closed loop working (no profile).
+2. `youtube.py` + `upa_agent.py` → `pfa_agent.py` for session/profile fusion.
+3. Integrate `kg.py`/`vector.py` → in `rpa_agent.py` write and reference evidence to strengthen explainability.
 
 ------
 
-## 3) Worker agents & prompts
-
-Each worker is built with `create_react_agent(model, tools=[...], name=...)`. Keep prompts **operational**: when to use which tool, expected JSON, and guardrails. [LangChain AI](https://langchain-ai.github.io/langgraph/reference/agents/?utm_source=chatgpt.com)
-
-### 3.1 UIA — User-Intent & Constraints Agent
-
-- **Goal**: extract/complete `QuerySpec` from user utterances; ask clarifying questions if needed; *no external API calls*.
-- **Output**: a single `QuerySpec` JSON.
-
-Prompt points:
-
-- Only produce `QuerySpec`. If any of {location, price_band, cuisines, diet} is missing, ask a short follow-up.
-- Do not search; return control to supervisor when `QuerySpec` is ready.
-
-### 3.2 UPA — User Profile Construction Agent
-
-- **Goal**: build `UserTasteProfile` from YouTube history, Google Maps Likes (OAuth), and item-item CF.
-- **Tools**: `yt_fetch_history`, `yt_topics_infer`, `gmaps_likes_fetch`, `item_item_cf`, `profile_merge`.
-- **Degrade** gracefully (session-only profile) when no OAuth.
-
-Prompt points:
-
-- Call only authorized tools; otherwise produce a session-level profile from `QuerySpec`.
-- Output sparse, interpretable features; no raw dumps.
-
-### 3.3 RPA — Restaurant Profile Construction Agent
-
-- **Goal**: collect 20–50 candidates via Places search + Details; run ER extraction; upsert to KG & vector index; return compact `RestaurantDoc[]`.
-- **Tools**: `place_text_search`, `place_details_batch`, `entity_relation_extract`, `kg_upsert`, `vector_embed_and_upsert`, `hybrid_collect_candidates`.
-
-Prompt points:
-
-- Keep each candidate minimal (`place_id, name, geo, price_level?, cuisine_tags, short_desc`).
-- If recall < 3, retry with refined queries at most twice.
-
-### 3.4 PFA — Preference Fusion & Scoring Agent
-
-- **Goal**: fuse `QuerySpec + UserTasteProfile + RestaurantDoc[]` into `RankedList` with reasons.
-- **Tools**: `scoring_pipeline` (performs filter → similarity/weights → MMR/diversity).
-
-Prompt points:
-
-- Apply **hard filters** first (radius/budget/diet); then multi-objective scoring; add `why[]`/`cautions[]` per item.
-
-### 3.5 EEA — Evidence & Enrichment Agent
-
-- **Goal**: enrich Top-K with photos, hours, deeplinks; produce `{place_id -> Evidence}`.
-- **Tools**: `fetch_place_photos`, `opening_hours_normalize`, `build_gmaps_deeplink`.
-
-Prompt points:
-
-- Fetch ≤3 photos per place; include hours summary; produce a final card-friendly JSON.
-
-### 3.6 FLA — Feedback & Learning Agent (optional)
-
-- **Goal**: log user feedback; update weights for profile & ranker.
-- **Tools**: `log_feedback`.
-
-------
-
-## 4) Tool layer (contracts & guidance)
-
-Define tools with LangChain’s `@tool` and `args_schema`; keep schemas precise and outputs compact. Reference docs: custom tools, tool concepts, API reference for `@tool`. [LangChain+2LangChain+2](https://python.langchain.com/docs/how_to/custom_tools/?utm_source=chatgpt.com)
-
-**UPA**
-
-- `yt_fetch_history(user_id:str, max_items:int=50) -> list[VideoMeta]`
-- `yt_topics_infer(videos:list[VideoMeta]) -> {topic_keywords:[], cuisine_keywords:[], creators_top:[]}`
-- `gmaps_likes_fetch(user_id:str) -> list[str]  # place_id[]`
-- `item_item_cf(seed_place_ids:list[str]) -> {similar_place_ids:[], weights:[]}`
-- `profile_merge(query_spec:QuerySpec|None, yt_topics:dict|None, likes_cf:dict|None) -> UserTasteProfile`
-
-**RPA**
-
-- `place_text_search(query:str, region_code:str|None, location_bias:str|None) -> list[Candidate]`
-- `place_details_batch(place_ids:list[str]) -> list[PlaceDetail]`
-- `entity_relation_extract(texts:list[str]) -> list[Triple]`
-- `kg_upsert(triples:list[Triple]) -> {node_ids:[], edge_ids:[]}`
-- `vector_embed_and_upsert(docs:list[RestaurantDoc]) -> {embedding_ids:[]}`
-- `hybrid_collect_candidates(query_spec:QuerySpec, user_profile:UserTasteProfile|None) -> list[RestaurantDoc]`
-
-**PFA**
-
-- `scoring_pipeline(candidates:list[RestaurantDoc], query_spec:QuerySpec, user_profile:UserTasteProfile|None) -> RankedList`
-
-**EEA**
-
-- `fetch_place_photos(photo_reference:str, max_w:int=800, max_h:int=800) -> {photo_url:str}`
-- `opening_hours_normalize(place_detail:PlaceDetail) -> {today_is_open:bool, closes_at:str|None, next_open:str|None}`
-- `build_gmaps_deeplink(place_id:str, mode:str="driving", origin:str|None=None) -> str`
-
-> For prebuilt agent usage & tool calling semantics see LangGraph agent docs and “Call tools” how-to. [LangChain AI+1](https://langchain-ai.github.io/langgraph/reference/agents/?utm_source=chatgpt.com)
-
-------
-
-## 5) Handoff strategy (supervisor routing)
-
-We use **custom handoff tools** created via `create_handoff_tool` so the supervisor can transfer control to a target agent with a **small task message** and selected state fields. The library also supports **forward_message** to send a worker’s result straight to the user. [LangChain AI](https://langchain-ai.github.io/langgraph/reference/supervisor/?utm_source=chatgpt.com)
-
-**Default route**
-
-1. `delegate_to_UIA` → writes `query_spec`
-2. `delegate_to_UPA` (if authorized) → writes `user_profile`
-3. `delegate_to_RPA` → writes `candidates`
-4. `delegate_to_PFA` → writes `ranked`
-5. `delegate_to_EEA` → writes `evidence`
-6. `forward_to_user` → returns final cards
-
-**Fallbacks**
-
-- If `candidates < 3`: route back to `UIA` to relax constraints.
-- If no OAuth: skip `UPA`, pass `user_profile=None` to `PFA`.
-- If any tool 429/5xx: backoff-retry (≤2); then degrade (omit photos/hours, keep core fields).
-
-> The tutorial describes handoffs and passing (full) history; we purposely pass **only a task + needed state slice** to keep tokens small. [LangChain AI](https://langchain-ai.github.io/langgraph/tutorials/multi_agent/agent_supervisor/?utm_source=chatgpt.com)
-
-------
-
-## 6) Wiring (code outline)
-
-- **Workers**: build with `create_react_agent(model, tools=[...], name="...")`. [LangChain AI](https://langchain-ai.github.io/langgraph/reference/agents/?utm_source=chatgpt.com)
-- **Supervisor**: `create_supervisor(agents=[...], tools=[handoffs..., forward_message], model=..., output_mode="last_message", add_handoff_messages=True)`. [LangChain AI](https://langchain-ai.github.io/langgraph/reference/supervisor/?utm_source=chatgpt.com)
-- **Compilation & memory**: compile the graph with a checkpointer and use `thread_id` per conversation (see Agents quickstart and migration notes). [LangChain AI+1](https://langchain-ai.github.io/langgraph/agents/agents/?utm_source=chatgpt.com)
-
-------
-
-## 7) Coding rules for tools & agents (for Codex)
-
-1. **I/O minimalism**: Project any third-party responses to our schemas before returning.
-2. **Deterministic return shape**: No free-text in tool outputs; use fields with explicit types.
-3. **Retries & timeouts**: Each network tool must set `timeout` and implement 2-try exponential backoff (catch 429/5xx).
-4. **Caching**: Cache `place_details_batch` & `fetch_place_photos` by `(place_id, fields/max_w/max_h)` for 24h.
-5. **Rate limits**: Add per-tool token-bucket guards (configurable).
-6. **Privacy**: No raw user identifiers in logs; if logging coordinates, quantize (e.g., 3-dp).
-7. **Testing**: Each tool gets a unit test with recorded or mocked responses; workers get happy-path & failure-path tests.
-
-References for tool creation and configuration: LangChain tool guides & API docs. [LangChain Docs+3LangChain+3LangChain+3](https://python.langchain.com/docs/how_to/custom_tools/?utm_source=chatgpt.com)
-
-------
-
-## 8) Prompts (snippets)
-
-**Supervisor system prompt (essentials)**
-
-- Roles & boundaries for each worker.
-- “Assign exactly one worker at a time.”
-- “Never call external APIs yourself; use handoff tools.”
-- “Prefer compact JSON over prose; only include fields required by the next step.”
-
-**Worker prompts**
-
-- What to produce (the target schema).
-- Which tools exist and when to call them.
-- “Stop when the schema is satisfied; avoid redundant calls.”
-
-> The supervisor prompt quality is critical for correct delegation. [Medium](https://medium.com/@khandelwal.akansha/understanding-the-langgraph-multi-agent-supervisor-00fa1be4341b?utm_source=chatgpt.com)
-
-------
-
-## 9) Acceptance checklist (Done = ✅)
-
-- ✅ **UIA** returns valid `QuerySpec` for 10+ diverse utterances (missing fields → clarifying follow-ups).
-- ✅ **UPA** produces a non-empty profile with OAuth and a session-only fallback without OAuth.
-- ✅ **RPA** returns 20–50 candidates with <10 required fields each; retry logic triggers on low recall.
-- ✅ **PFA** produces `RankedList` with `why[]` aligned to `QuerySpec`/`UserTasteProfile`.
-- ✅ **EEA** enriches Top-K with ≤3 photos, normalized hours, and a working Maps deeplink.
-- ✅ Supervisor route adheres to the default pipeline; fallbacks exercised in tests.
-- ✅ Tool calls are visible in traces; each step is auditable.
-
-------
-
-## 10) Quickstart (scaffold expectations)
-
-- Workers defined in `apps/whatseat/agents/*.py`, tools in `apps/whatseat/tools/*.py`, supervisor in `apps/whatseat/supervisor/`.
-- Use **prebuilt agent** helpers for workers; confirm via reference docs & quickstart. [LangChain AI+1](https://langchain-ai.github.io/langgraph/reference/agents/?utm_source=chatgpt.com)
-- Handoffs built with `create_handoff_tool` and (optionally) `create_forward_message_tool` from the supervisor library. [LangChain AI](https://langchain-ai.github.io/langgraph/reference/supervisor/?utm_source=chatgpt.com)
-
-------
-
-### Appendix: Why this stack?
-
-- **Supervisor + handoff tools**: idiomatic LangGraph approach for hierarchical multi-agent orchestration. [LangChain AI](https://langchain-ai.github.io/langgraph/tutorials/multi_agent/agent_supervisor/?utm_source=chatgpt.com)
-- **Prebuilt ReAct workers**: faster, more reliable than legacy LangChain agents; the docs recommend LangGraph’s implementation for production. [LangChain+1](https://python.langchain.com/api_reference/langchain/agents/langchain.agents.react.agent.create_react_agent.html?utm_source=chatgpt.com)
-- **`@tool` with schemas**: first-class support for tool I/O contracts; improves model grounding and robustness. [LangChain+1](https://python.langchain.com/docs/how_to/custom_tools/?utm_source=chatgpt.com)
-
-> For additional background and examples, see the official supervisor reference and community write-ups. [LangChain AI+1](https://langchain-ai.github.io/langgraph/reference/supervisor/?utm_source=chatgpt.com)
-
-------
-
-**End of AGENTS.md**
+### Appendix: Standard constructor signatures for each agent file
+
+- `apps/whatseat/agents/uia_agent.py` → `def build_uia_agent(): ...` (outputs only `QuerySpec`)
+- `apps/whatseat/agents/upa_agent.py` → `def build_upa_agent(): ...`
+- `apps/whatseat/agents/rpa_agent.py` → `def build_rpa_agent(): ...`
+- `apps/whatseat/agents/pfa_agent.py` → `def build_pfa_agent(): ...`
+- `apps/whatseat/agents/eea_agent.py` → `def build_eea_agent(): ...`
+
+> The above naming/style is consistent with the APIs and examples of `langgraph_supervisor`. After pasting your existing Jupyter code into the corresponding tool implementations, you can run directly via `run_demo.py`.
