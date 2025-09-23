@@ -35,7 +35,7 @@ export OPENAI_API_KEY=<your_api_key>
 from langchain_openai import ChatOpenAI
 
 from langgraph_supervisor import create_supervisor
-from langgraph.prebuilt import create_react_agent
+from langchain.agents import create_agent
 
 model = ChatOpenAI(model="gpt-4o")
 
@@ -60,14 +60,14 @@ def web_search(query: str) -> str:
         "5. **Google (Alphabet)**: 181,269 employees."
     )
 
-math_agent = create_react_agent(
+math_agent = create_agent(
     model=model,
     tools=[add, multiply],
     name="math_expert",
     prompt="You are a math expert. Always use one tool at a time."
 )
 
-research_agent = create_react_agent(
+research_agent = create_agent(
     model=model,
     tools=[web_search],
     name="research_expert",
@@ -297,7 +297,7 @@ export OPENAI_API_KEY=<your_api_key>
 ```
 
 ```python
-from langgraph.prebuilt import create_react_agent
+from langgraph.prebuilt import create_agent
 from langgraph_supervisor import create_supervisor
 
 from langchain_openai import ChatOpenAI
@@ -342,7 +342,7 @@ def web_search(query: str) -> str:
         "5. **Google (Alphabet)**: 181,269 employees."
     )
 
-research_agent = create_react_agent(
+research_agent = create_agent(
     model=model,
     tools=[web_search],
     name="research_expert",

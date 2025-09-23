@@ -12,7 +12,7 @@ from langchain_core.outputs import ChatGeneration, ChatResult
 from langchain_core.runnables import Runnable, RunnableConfig
 from langchain_core.tools import BaseTool, tool
 from langgraph.graph import MessagesState, StateGraph
-from langgraph.prebuilt import create_react_agent
+from langchain.agents import create_agent
 
 from langgraph_supervisor import create_supervisor
 from langgraph_supervisor.agent_name import AgentNameMode, with_agent_name
@@ -187,30 +187,28 @@ def test_supervisor_basic_workflow(
         )
 
     math_model: FakeChatModel = FakeChatModel(responses=math_agent_messages)
-    if include_individual_agent_name:
-        math_model = cast(
-            FakeChatModel,
-            with_agent_name(math_model.bind_tools([add]), include_individual_agent_name),
-        )
-
-    math_agent = create_react_agent(
+    math_agent = create_agent(
         model=math_model,
         tools=[add],
         name="math_expert",
     )
 
-    research_model = FakeChatModel(responses=research_agent_messages)
     if include_individual_agent_name:
-        research_model = cast(
-            FakeChatModel,
-            with_agent_name(research_model.bind_tools([web_search]), include_individual_agent_name),
-        )
+        math_agent = math_agent.with_config({
+            "model": with_agent_name(math_model, include_individual_agent_name)
+        })
 
-    research_agent = create_react_agent(
+    research_model = FakeChatModel(responses=research_agent_messages)
+    research_agent = create_agent(
         model=research_model,
         tools=[web_search],
         name="research_expert",
     )
+
+    if include_individual_agent_name:
+        research_agent = research_agent.with_config({
+            "model": with_agent_name(research_model, include_individual_agent_name)
+        })
 
     workflow = create_supervisor(
         [math_agent, research_agent],
@@ -244,13 +242,13 @@ def test_supervisor_basic_workflow(
     assert result["messages"][11] == supervisor_messages[-1]
 
     # output_mode = "full_history"
-    math_agent = create_react_agent(
+    math_agent = create_agent(
         model=FakeChatModel(responses=math_agent_messages),
         tools=[add],
         name="math_expert",
     )
 
-    research_agent = create_react_agent(
+    research_agent = create_agent(
         model=FakeChatModel(responses=research_agent_messages),
         tools=[web_search],
         name="research_expert",
@@ -377,8 +375,8 @@ def test_worker_hide_handoffs() -> None:
         ],
         assertion=Expectations(expectations),
     )
-    echo_agent = create_react_agent(
-        model=echo_model.bind_tools([echo_tool]),
+    echo_agent = create_agent(
+        model=echo_model,
         tools=[echo_tool],
         name="echo_agent",
     )
@@ -439,8 +437,8 @@ def test_supervisor_message_forwarding() -> None:
             AIMessage(content="Echo: test forwarding!"),
         ]
     )
-    echo_agent = create_react_agent(
-        model=echo_model.bind_tools([echo_tool]),
+    echo_agent = create_agent(
+        model=echo_model,
         tools=[echo_tool],
         name="echo_agent",
     )
