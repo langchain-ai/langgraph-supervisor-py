@@ -38,3 +38,6 @@ def build_app():
         parallel_tool_calls=False,         # 1-at-a-time handoffs (tutorial style)
     )
     return workflow.compile()
+
+# Export compiled app for LangGraph Server discovery
+app = build_app()
