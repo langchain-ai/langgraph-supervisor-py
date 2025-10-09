@@ -39,5 +39,3 @@ def build_app():
     )
     return workflow.compile()
 
-# Export compiled app for LangGraph Server discovery
-app = build_app()

@@ -2,7 +2,7 @@
     "$schema": "https://langgra.ph/schema.json",
     "dependencies": ["."],
     "graphs": {
-        "agent": "./whats_eat/app/supervisor_app.py:app"
+        "agent": "./whats_eat/app/run.py:app"
     },
     "env": ".env",
     "image_distro": "wolfi"
