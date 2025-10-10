@@ -6,12 +6,14 @@ from whats_eat.agents.places_agent import build_places_agent
 from whats_eat.agents.youtube_agent import build_youtube_agent
 from whats_eat.agents.recommender_agent import build_recommender_agent
 from whats_eat.agents.summarizer_agent import build_summarizer_agent
+from whats_eat.agents.route_agent import build_route_agent
 
 def build_app():
     places = build_places_agent()
     youtube = build_youtube_agent()
     recommender = build_recommender_agent()
     summarizer = build_summarizer_agent()
+    route = build_route_agent()
 
     # Optional extra tool: forward a worker's exact wording to the user
     forward_tool = create_forward_message_tool()
@@ -23,12 +25,13 @@ def build_app():
         "  • YouTube tastes/profile → youtube_agent\n"
         "  • Ranking/shortlisting → recommender_agent\n"
         "  • Condense long outputs → summarizer_agent\n"
+        "  • Convert zip codes to latitude and longitude coordinates or get an interactive map → route_agent\n"
         "- Do not solve tasks yourself. Use handoff tools to delegate.\n"
         "- When a worker finishes, respond to the user with the result."
     )
 
     workflow = create_supervisor(
-        agents=[places, youtube, recommender, summarizer],
+        agents=[places, youtube, recommender, summarizer, route],
         model=init_chat_model("openai:gpt-4.1"),
         tools=[forward_tool],              # your handoff tools will be auto-added
         prompt=supervisor_prompt,
