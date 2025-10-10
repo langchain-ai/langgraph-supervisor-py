@@ -12,15 +12,19 @@ authors = [
 license = "MIT"
 license-files = ["LICENSE"]
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 dependencies = [
     "langgraph>=0.6.0,<0.7.0",
     "langchain-core>=0.3.40",
     "pytest>=8.4.1",
     "langchain-openai>=0.3.33",
+    "langchain>=0.3.27",
 ]
 
 [dependency-groups]
+dev = [
+    "langgraph-cli[inmem]>=0.4.3",
+]
 test = [
     "pytest>=8.0.0",
     "ruff>=0.9.4",

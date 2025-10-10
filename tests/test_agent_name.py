@@ -1,6 +1,6 @@
 from langchain_core.messages import AIMessage, HumanMessage
 
-from langgraph_supervisor.agent_name import (
+from whats_eat import (
     add_inline_agent_name,
     remove_inline_agent_name,
 )

@@ -1,0 +1,9 @@
+{
+    "$schema": "https://langgra.ph/schema.json",
+    "dependencies": ["."],
+    "graphs": {
+        "agent": "./whats_eat/app/run.py:app"
+    },
+    "env": ".env",
+    "image_distro": "wolfi"
+}
