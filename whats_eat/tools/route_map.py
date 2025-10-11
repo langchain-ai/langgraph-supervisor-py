@@ -1,24 +1,11 @@
 from __future__ import annotations
 
 import os
-import time
 import html
 from typing import Any, Dict, Optional
 
-import requests
 from langchain_core.tools import tool
-
-_GEOCODE_URL = "https://maps.googleapis.com/maps/api/geocode/json"
-_RETRY_STATUS = {429, 500, 502, 503, 504}
-
-
-def _require_server_key() -> str:
-    key = os.getenv("GOOGLE_MAPS_API_KEY") or os.getenv("SERVER_KEY")
-    if not key:
-        raise RuntimeError(
-            "Missing GOOGLE_MAPS_API_KEY (or SERVER_KEY) for Google Geocoding API access"
-        )
-    return key
+from whats_eat.tools.google_places import _geocode_address
 
 
 def _require_browser_key() -> str:
@@ -32,62 +19,16 @@ def _require_browser_key() -> str:
     return key
 
 
-def _request_with_backoff(
-    method: str,
-    url: str,
-    *,
-    params: Optional[Dict[str, Any]] = None,
-    timeout: int = 20,
-    tries: int = 3,
-) -> requests.Response:
-    last_err: Optional[Exception] = None
-    for attempt in range(tries):
-        try:
-            resp = requests.request(method, url, params=params, timeout=timeout)
-        except requests.RequestException as exc:
-            last_err = exc
-        else:
-            if resp.status_code in _RETRY_STATUS and attempt < tries - 1:
-                time.sleep(2 ** attempt)
-                continue
-            resp.raise_for_status()
-            return resp
-        time.sleep(2 ** attempt)
-    if last_err:
-        raise RuntimeError(f"HTTP request failed for {url}: {last_err}") from last_err
-    raise RuntimeError(f"HTTP request failed for {url}")
-
-
-def _geocode_one(address: str, key: str) -> Dict[str, Any]:
-    if not address:
-        raise ValueError("address is required for geocoding")
-    resp = _request_with_backoff("GET", _GEOCODE_URL, params={"address": address, "key": key})
-    data = resp.json()
-    status = data.get("status")
-    if status != "OK":
-        raise RuntimeError(f"Geocoding failed: {status} {data.get('error_message')}")
-    result = data["results"][0]
-    loc = result["geometry"]["location"]
-    return {
-        "lat": loc["lat"],
-        "lng": loc["lng"],
-        "formatted": result.get("formatted_address"),
-        "place_id": result.get("place_id"),
-        "types": result.get("types") or [],
-    }
-
-
-@tool("route_geocode")
-def route_geocode(origin_address: str, dest_address: str) -> Dict[str, Any]:
-    """Geocode origin and destination addresses into coordinates using Google Geocoding API.
-
-    Returns a dict: {"origin": {...}, "destination": {...}}
-    Requires env GOOGLE_MAPS_API_KEY (or SERVER_KEY).
-    """
-    server_key = _require_server_key()
-    origin = _geocode_one(origin_address, server_key)
-    dest = _geocode_one(dest_address, server_key)
-    return {"origin": origin, "destination": dest}
+# @tool("route_geocode")
+# def route_geocode(origin_address: str, dest_address: str) -> Dict[str, Any]:
+#     """Geocode origin and destination addresses into coordinates using Google Geocoding API.
+#
+#     Returns a dict: {"origin": {...}, "destination": {...}}
+#     Requires env GOOGLE_MAPS_API_KEY.
+#     """
+#     origin = _geocode_address(origin_address)
+#     dest = _geocode_address(dest_address)
+#     return {"origin": origin, "destination": dest}
 
 
 def _sanitize_mode(mode: Optional[str]) -> str:
@@ -173,10 +114,8 @@ def route_build_map_html(
     else:
         if not origin_address or not dest_address:
             raise ValueError("Provide either coordinates or both origin_address and dest_address")
-        server_key = _require_server_key()
-        o = _geocode_one(origin_address, server_key)
-        d = _geocode_one(dest_address, server_key)
+        o = _geocode_address(origin_address)
+        d = _geocode_address(dest_address)
         o_lat, o_lng, d_lat, d_lng = o["lat"], o["lng"], d["lat"], d["lng"]
 
     return _build_html(o_lat, o_lng, d_lat, d_lng, browser_key=browser_key, travel_mode=travel_mode)
-
