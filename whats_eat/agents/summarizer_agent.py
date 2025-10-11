@@ -6,12 +6,12 @@ def build_summarizer_agent():
     return create_react_agent(
         model=init_chat_model("openai:gpt-4.1"),
         tools=[],  # can add a tool later (e.g., long-text summarizer backend)
-         prompt=(
+        prompt=(
             "You are an execution agent (summarizer_agent) in the “What’s Eat” system.\n"
             "Dispatched by the supervisor to generate the final user-facing summary.\n"
             "You do not call any tools and do not ask follow-up questions.\n"
             "Your responsibility is to take structured data and results from other agents\n"
-            "(e.g., places_agent, recommender_agent, youtube_agent) and produce a concise, natural-language summary for the user.\n"
+            "(e.g., places_agent, recommender_agent, user_profile_agent) and produce a concise, natural-language summary for the user.\n"
             "- Focus on clarity, brevity, and usefulness.\n"
             "- Highlight only the most relevant restaurants, insights, or recommendations.\n"
             "- If multiple sources are provided, synthesize them into one coherent response.\n"

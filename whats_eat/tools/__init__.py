@@ -1,7 +1,8 @@
 from .ranking import rank_restaurants
 from .google_places import places_text_search, places_fetch_photos, places_coordinate_search, place_geocode
-from .youtube_data import yt_list_subscriptions,yt_list_liked_videos
+from .user_profile import embed_user_preferences, yt_list_liked_videos, yt_list_subscriptions
 from .route_map import route_build_map_html
+
 __all__ = [
     "rank_restaurants",
     "place_geocode",
@@ -11,4 +12,5 @@ __all__ = [
     "yt_list_subscriptions",
     "yt_list_liked_videos",
     "route_build_map_html",
+    "embed_user_preferences",
 ]

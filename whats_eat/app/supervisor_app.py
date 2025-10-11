@@ -3,14 +3,14 @@ from langchain.chat_models import init_chat_model
 from whats_eat.langgraph_supervisor import create_supervisor, create_forward_message_tool  # your package
 
 from whats_eat.agents.places_agent import build_places_agent
-from whats_eat.agents.youtube_agent import build_youtube_agent
+from whats_eat.agents.user_profile_agent import build_user_profile_agent
 from whats_eat.agents.recommender_agent import build_recommender_agent
 from whats_eat.agents.summarizer_agent import build_summarizer_agent
 from whats_eat.agents.route_agent import build_route_agent
 
 def build_app():
     places = build_places_agent()
-    youtube = build_youtube_agent()
+    user_profile = build_user_profile_agent()
     recommender = build_recommender_agent()
     summarizer = build_summarizer_agent()
     route = build_route_agent()
@@ -21,14 +21,16 @@ def build_app():
     supervisor_prompt = (
         "You are the supervisor. Route each user request to exactly ONE agent at a time.\n"
         "- Available agents:\n"
+
         "  • places_agent – retrieves and analyzes information about places, restaurants, or local venues; GEOCODES any addresses (user or restaurant) to lat/long.\n"
-        "  • youtube_agent – builds a user taste profile by analyzing YouTube activity, watched channels, or favorite creators.\n"
+        "  • user_profile_agent – converts YouTube behaviour into structured dining preferences and embeddings.\n"
         "  • recommender_agent – ranks, filters, or selects items (e.g., recommends top places based on taste, location, or user preferences).\n"
         "  • summarizer_agent – combines and refines results from other agents to generate the final, human-readable response.\n"
         "  • route_agent – computes routes and generates interactive map views GIVEN coordinates (lat/long); does not perform geocoding.\n"
         "- Routing guide:\n"
         "  • Location/place search or address→coordinates (user or restaurant) → places_agent\n"
-        "  • YouTube history, channels, or interest-based profiling → youtube_agent\n"
+        "  • YouTube history, channels, or interest-based profiling → user_profile_agent\n"
+      
         "  • Ranking, comparison, or shortlisting → recommender_agent\n"
         "  • Routing / map visualization when coordinates are known → route_agent\n"
         "  • When all required information has been gathered, produce the final answer → summarizer_agent\n"
@@ -46,7 +48,7 @@ def build_app():
 )
 
     workflow = create_supervisor(
-        agents=[places, youtube, recommender, summarizer, route],
+        agents=[places, user_profile, recommender, summarizer, route],
         model=init_chat_model("openai:gpt-4.1"),
         tools=[forward_tool],              # your handoff tools will be auto-added
         prompt=supervisor_prompt,
@@ -56,4 +58,3 @@ def build_app():
         parallel_tool_calls=False,         # 1-at-a-time handoffs (tutorial style)
     )
     return workflow.compile()
-

@@ -1,34 +1,34 @@
-
 """
-YouTube Data API tools with lightweight projections for subscriptions and liked videos.
+User profile tooling that wraps YouTube Data API access and OpenAI embeddings.
 
-The implementation reuses the OAuth logic from ``CallAPIs/YouTube_API_test.ipynb`` but
-removes interactive flows so that agents can run unattended. Credentials are expected to be
-present in ``token.json`` (or the path supplied via ``YOUTUBE_TOKEN_PATH``) alongside a refresh
-token. Tools expose compact results to keep cross-agent state small.
+Exposes three LangChain tools:
+- yt_list_liked_videos
+- yt_list_subscriptions
+- embed_user_preferences
 """
 
 from __future__ import annotations
 
+import os
+import time
 from functools import lru_cache
 from typing import Any, Dict, Iterable, List, Optional, Sequence
 
-import os
-import time
-
 from langchain_core.tools import tool
+from langchain_openai import OpenAIEmbeddings
+from pydantic import BaseModel, Field
 
 RETRYABLE_STATUS_CODES: frozenset[int] = frozenset({429, 500, 502, 503, 504})
 MAX_ATTEMPTS = 3
 DEFAULT_MAX_RESULTS = 50
 SCOPES_ENV = "YOUTUBE_SCOPES"
 TOKEN_ENV = "YOUTUBE_TOKEN_PATH"
-
 DEFAULT_SCOPE = "https://www.googleapis.com/auth/youtube.readonly"
 
 try:  # Optional dependencies; tests monkeypatch the YouTube client to avoid importing these.
     from google.auth.exceptions import RefreshError  # type: ignore[import]
 except ImportError:
+
     class RefreshError(Exception):  # type: ignore[override]
         """Fallback when google-auth is not installed."""
 
@@ -285,4 +285,117 @@ def yt_list_liked_videos(
     }
 
 
-__all__ = ["yt_list_subscriptions", "yt_list_liked_videos"]
+class EmbedInput(BaseModel):
+    text: str = Field(..., description="Text to embed. Concise bullet-style summary is recommended.")
+    model: str = Field(
+        default="text-embedding-3-small",
+        description="OpenAI embedding model identifier (e.g., text-embedding-3-small / text-embedding-3-large).",
+    )
+    normalize: bool = Field(
+        default=True,
+        description="If true, L2-normalize the output vector (recommended for cosine/dot retrieval).",
+    )
+    max_chars: Optional[int] = Field(
+        default=8000,
+        description="Optional hard cap to avoid extremely long inputs; set None to skip.",
+    )
+
+
+@lru_cache(maxsize=4)
+def _get_embedder(model: str) -> OpenAIEmbeddings:
+    # langchain-openai reads OPENAI_API_KEY from env
+    return OpenAIEmbeddings(model=model)
+
+
+def _l2_normalize(vec: List[float]) -> List[float]:
+    norm = sum(x * x for x in vec) ** 0.5
+    return [x / norm for x in vec] if norm > 0 else vec
+
+
+@tool("embed_user_preferences", args_schema=EmbedInput)
+def embed_user_preferences(
+    text: str,
+    model: str = "text-embedding-3-small",
+    normalize: bool = True,
+    max_chars: Optional[int] = 8000,
+) -> Dict[str, Any]:
+    """
+    Return an OpenAI embedding vector for the supplied text.
+
+    Returns:
+      {
+        "model": str,
+        "embedding": List[float],
+        "dim": int,
+        "normalized": bool,
+        "error": str | None
+      }
+    Never raises: on failure returns {"error": "...", "embedding": []}.
+    """
+    try:
+        if not os.getenv("OPENAI_API_KEY"):
+            return {
+                "model": model,
+                "embedding": [],
+                "dim": 0,
+                "normalized": False,
+                "error": "missing_openai_api_key",
+            }
+
+        if not isinstance(text, str):
+            return {
+                "model": model,
+                "embedding": [],
+                "dim": 0,
+                "normalized": False,
+                "error": "invalid_text_type",
+            }
+
+        clean = text.strip()
+        if not clean:
+            return {
+                "model": model,
+                "embedding": [],
+                "dim": 0,
+                "normalized": False,
+                "error": "empty_text",
+            }
+
+        if isinstance(max_chars, int) and max_chars > 0 and len(clean) > max_chars:
+            clean = clean[:max_chars]
+
+        embedder = _get_embedder(model)
+        vec = embedder.embed_query(clean)
+
+        if not isinstance(vec, list) or not vec:
+            return {
+                "model": model,
+                "embedding": [],
+                "dim": 0,
+                "normalized": False,
+                "error": "empty_embedding",
+            }
+
+        if normalize:
+            vec = _l2_normalize(vec)
+
+        return {
+            "model": model,
+            "embedding": vec,
+            "dim": len(vec),
+            "normalized": bool(normalize),
+            "error": None,
+        }
+
+    except Exception as exc:  # pragma: no cover - defensive fallback
+        return {
+            "model": model,
+            "embedding": [],
+            "dim": 0,
+            "normalized": False,
+            "error": f"{type(exc).__name__}: {exc}",
+        }
+
+
+__all__ = ["yt_list_subscriptions", "yt_list_liked_videos", "embed_user_preferences"]
+
