@@ -1,6 +1,6 @@
 from langgraph.prebuilt import create_react_agent
 from langchain.chat_models import init_chat_model
-from whats_eat.tools.route_map import route_geocode, route_build_map_html
+from whats_eat.tools.route_map import route_build_map_html
 
 
 def build_route_agent():
