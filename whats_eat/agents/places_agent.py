@@ -22,6 +22,7 @@ def build_places_agent():
             "   places.googleMapsUri, places.rating, places.userRatingCount,\n"
             "   places.priceLevel, places.types, places.photos.name, places.generativeSummary]\n"
             "- Automatically fetch photo metadata (places.photos.name) for each restaurant and include it in the output (return photo references, not binary images).\n"
+            "- Convert each formattedAddress into a postal code using the Google Maps Geocoding API and include it as `postalCode` in the output.\n"
             "- Do NOT fabricate or infer any data beyond what the API provides.\n"
             "- Return results as structured JSON, containing only the actual fields fetched from the API.\n"
             "- The response must be a single JSON object containing an 'items' array of restaurants.\n"
