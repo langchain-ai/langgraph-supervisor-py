@@ -6,7 +6,7 @@ from whats_eat.tools.route_map import route_geocode, route_build_map_html
 def build_route_agent():
     return create_react_agent(
         model=init_chat_model("openai:gpt-4.1"),
-        tools=[route_geocode, route_build_map_html],
+        tools=[route_build_map_html],
         prompt=(
             "You are a Route & Maps execution agent (route_agent) in the “What’s Eat” system.\n"
             "- Dispatched by the supervisor to calculate and display the route and distance between the user's location and a selected restaurant.\n"
