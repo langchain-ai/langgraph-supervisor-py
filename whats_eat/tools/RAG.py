@@ -7,8 +7,7 @@ from typing import Dict, List, Optional, Any
 
 from whats_eat.app.env_loader import load_env
 from neo4j import GraphDatabase
-from sentence_transformers import SentenceTransformer
-
+from openai import OpenAI
 
 # Load environment variables including .env.json
 load_env()
@@ -16,8 +15,7 @@ load_env()
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-
-class RAGAgent:
+class RAGTools:
     def __init__(self) -> None:
         # Neo4j connection
         self.neo4j_uri: str = os.getenv("NEO4J_URI", "bolt://localhost:7687")
@@ -35,15 +33,9 @@ class RAGAgent:
         self._pinecone_index: Optional[object] = None
         self._pinecone_new_sdk: bool = False
 
-        # Embedding model
-        self.model = SentenceTransformer("all-MiniLM-L6-v2")
-        logger.info("Initialized RAG agent")
-        logger.info(f"Neo4j URI: {self.neo4j_uri}")
-        logger.info(f"Neo4j password present: {bool(self.neo4j_password)}")
-        logger.info(f"Pinecone API key present: {bool(self.pinecone_api_key)}")
-        logger.info(f"Pinecone environment: {self.pinecone_environment}")
+        # OpenAI client for embeddings
+        self.openai_client = OpenAI()
 
-    # ----------------------- Neo4j -----------------------
     def connect_neo4j(self) -> None:
         """Connect to Neo4j using environment variables."""
         if not self.neo4j_password:
@@ -57,7 +49,6 @@ class RAGAgent:
             logger.error(f"Failed to connect to Neo4j: {e}")
             raise
 
-    # --------------------- Pinecone ----------------------
     def connect_pinecone(self) -> None:
         """Initialize Pinecone, preferring the new SDK and falling back to legacy."""
         if not self.pinecone_api_key:
@@ -89,7 +80,7 @@ class RAGAgent:
                     region = "us-east-1"
                 pc.create_index(
                     name=self.index_name,
-                    dimension=384,
+                    dimension=1536,
                     metric="cosine",
                     spec=_ServerlessSpec(cloud=cloud, region=region),
                 )
@@ -108,14 +99,13 @@ class RAGAgent:
                 )
                 if self.index_name not in pinecone_legacy.list_indexes():
                     pinecone_legacy.create_index(
-                        name=self.index_name, dimension=384, metric="cosine"
+                        name=self.index_name, dimension=1536, metric="cosine"
                     )
                 self._pinecone_index = pinecone_legacy.Index(self.index_name)
                 self._pinecone_client = pinecone_legacy
                 self._pinecone_new_sdk = False
                 logger.info("Initialized Pinecone (legacy SDK)")
             except Exception as legacy_err:
-                # Provide a clearer hint if the error likely stems from SDK rename
                 msg = str(new_err) if new_err else ""
                 if "pinecone-client" in msg or "renamed from `pinecone-client`" in msg:
                     raise RuntimeError(
@@ -123,19 +113,13 @@ class RAGAgent:
                     ) from new_err
                 raise legacy_err
 
-    # --------------------- Utilities ---------------------
     def load_json_data(self, file_path: str) -> Any:
         """Read a JSON file and return parsed data (dict or list)."""
         with open(file_path, "r", encoding="utf-8") as f:
             return json.load(f)
 
     def _normalize_place(self, raw: Dict[str, Any]) -> Optional[Dict[str, Any]]:
-        """Normalize incoming place record to expected schema.
-
-        Supports two formats:
-        - Google Places-like: has keys place_id, name, formatted_address, rating, types, reviews
-        - Test format (tests/test.json): keys id, displayName.text, formattedAddress
-        """
+        """Normalize incoming place record to expected schema."""
         if not isinstance(raw, dict):
             return None
 
@@ -158,7 +142,6 @@ class RAGAgent:
             }
         return None
 
-    # ---------------------- Ingest -----------------------
     def create_knowledge_graph(self, place_data: Dict[str, Any]) -> None:
         """Write place and (optionally) reviews into Neo4j."""
         if not self.neo4j_driver:
@@ -221,7 +204,12 @@ class RAGAgent:
                 parts.append("Reviews: " + reviews_text)
 
         text_representation = " ".join(p for p in parts if p).strip()
-        embedding = self.model.encode(text_representation)
+        response = self.openai_client.embeddings.create(
+            model="text-embedding-3-small",
+            input=text_representation,
+            encoding_format="float"
+        )
+        embedding = response.data[0].embedding
 
         if not self._pinecone_index:
             # Allow implicit init if caller forgot connect_pinecone
@@ -232,7 +220,7 @@ class RAGAgent:
                 vectors=[
                     {
                         "id": place_data["place_id"],
-                        "values": embedding.tolist(),
+                        "values": embedding,  # Already a list from OpenAI API
                         "metadata": {
                             "name": place_data.get("name"),
                             "address": place_data.get("formatted_address", ""),
@@ -247,7 +235,7 @@ class RAGAgent:
                 vectors=[
                     (
                         place_data["place_id"],
-                        embedding.tolist(),
+                        embedding,  # Already a list from OpenAI API
                         {
                             "name": place_data.get("name"),
                             "address": place_data.get("formatted_address", ""),
@@ -259,88 +247,17 @@ class RAGAgent:
 
         logger.info(f"Vector upserted for place: {place_data.get('name')}")
 
-    def process_places_data(self, json_file_path: str, dry_run: bool = False) -> List[Dict[str, Any]]:
-        """End-to-end processing: load JSON, normalize, optionally connect, and upsert.
-
-        Returns the list of normalized place docs processed.
-        """
-        data = self.load_json_data(json_file_path)
-        if isinstance(data, dict):
-            items = data.get("results", [])
-        elif isinstance(data, list):
-            items = data
-        else:
-            items = []
-
-        normalized: List[Dict[str, Any]] = []
-        for raw in items:
-            doc = self._normalize_place(raw)
-            if doc:
-                normalized.append(doc)
-
-        if not dry_run:
-            self.connect_neo4j()
-            self.connect_pinecone()
-            for place in normalized:
-                self.create_knowledge_graph(place)
-                self.create_embeddings(place)
-            logger.info("Finished processing places JSON: KG + embeddings upserted")
-        else:
-            logger.info(f"Dry run: would process {len(normalized)} places (no external connections)")
-
-        return normalized
-
-    # ---------------------- Query ------------------------
     def query_similar_places(self, query_text: str, top_k: int = 5) -> Any:
         """Encode the query and perform Pinecone vector search."""
-        query_embedding = self.model.encode(query_text).tolist()
+        response = self.openai_client.embeddings.create(
+            model="text-embedding-3-small",
+            input=query_text,
+            encoding_format="float"
+        )
+        query_embedding = response.data[0].embedding
+        
         if not self._pinecone_index:
             self.connect_pinecone()
         return self._pinecone_index.query(
             vector=query_embedding, top_k=top_k, include_metadata=True
         )
-
-
-if __name__ == "__main__":
-    # CLI: allow running the agent with a JSON file path
-    import argparse
-    import sys
-
-    parser = argparse.ArgumentParser(
-        prog="RAGAgent",
-        description=(
-            "Process Places-style JSON and store knowledge graph + embeddings; "
-            "then you can query with query_similar_places()."
-        ),
-    )
-    parser.add_argument(
-        "json_file",
-        nargs="?",
-        help="Path to places JSON file to process (optional)",
-    )
-    parser.add_argument(
-        "--dry-run",
-        action="store_true",
-        help="Parse and normalize only; skip Neo4j/Pinecone connections",
-    )
-
-    args = parser.parse_args()
-    agent = RAGAgent()
-
-    if args.json_file:
-        processed = agent.process_places_data(args.json_file, dry_run=args.dry_run)
-        if args.dry_run:
-            # Print a compact preview of normalized docs
-            preview = [
-                {"place_id": d.get("place_id"), "name": d.get("name"), "address": d.get("formatted_address")}
-                for d in processed
-            ]
-            print(json.dumps(preview, ensure_ascii=False, indent=2))
-    else:
-        print(
-            "No JSON file provided. You can run the module as:\n"
-            "  py -m whats_eat.agents.RAG_agent path\\to\\places.json\n"
-            "or:\n"
-            "  py whats_eat\\agents\\RAG_agent.py path\\to\\places.json"
-        )
-        sys.exit(2)

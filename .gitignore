@@ -44,3 +44,6 @@ dmypy.json
 .langgraph_api
 whats_eat/tools/client_secret.json
 token.json
+
+# env files
+whats_eat/.env.json
