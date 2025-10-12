@@ -1,0 +1,7 @@
+# Wait 60 seconds before connecting using these details, or login to https://console.neo4j.io to validate the Aura Instance is available
+NEO4J_URI=neo4j+s://8bc71a15.databases.neo4j.io
+NEO4J_USERNAME=neo4j
+NEO4J_PASSWORD=REcsIiGpNXlBTf5wahZh_xaGuExwWY9hfsG1rCswbEI
+NEO4J_DATABASE=neo4j
+AURA_INSTANCEID=8bc71a15
+AURA_INSTANCENAME=WhatsEat
