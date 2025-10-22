@@ -12,15 +12,14 @@ from langgraph._internal._runnable import RunnableCallable, RunnableLike
 from langgraph._internal._typing import DeprecatedKwargs
 from langgraph.graph import END, START, StateGraph
 from langgraph.graph.message import add_messages
-from langgraph.prebuilt import ToolNode
+from langchain.agents.tool_node import ToolNode
+from langchain.agents.react_agent import AgentState, AgentStateWithStructuredResponse
+from langchain.agents import create_agent
 from langgraph.prebuilt.chat_agent_executor import (
-    AgentState,
-    AgentStateWithStructuredResponse,
     Prompt,
     StateSchemaType,
     StructuredResponseSchema,
     _should_bind_tools,
-    create_react_agent,
 )
 from langgraph.pregel import Pregel
 from langgraph.pregel.remote import RemoteGraph
@@ -189,13 +188,17 @@ def _prepare_tool_node(
         # re-wrap the combined tools in a ToolNode
         # if the original input was a ToolNode, apply the same params
         if input_tool_node is not None:
+            # Create a basic ToolNode with only the essential parameters
             tool_node = ToolNode(
                 all_tools,
-                name=str(input_tool_node.name),
+                name=str(input_tool_node.name) if input_tool_node.name else None,
                 tags=list(input_tool_node.tags) if input_tool_node.tags else None,
-                handle_tool_errors=input_tool_node.handle_tool_errors,
-                messages_key=input_tool_node.messages_key,
             )
+            # Set the private attributes after creation if they exist
+            if hasattr(input_tool_node, '_handle_tool_errors'):
+                setattr(tool_node, '_handle_tool_errors', input_tool_node._handle_tool_errors)
+            if hasattr(input_tool_node, '_messages_key'):
+                setattr(tool_node, '_messages_key', input_tool_node._messages_key)
         else:
             tool_node = ToolNode(all_tools)
 
@@ -330,7 +333,7 @@ def create_supervisor(
         from langchain_openai import ChatOpenAI
 
         from langgraph_supervisor import create_supervisor
-        from langgraph.prebuilt import create_react_agent
+        from langgraph.prebuilt import create_agent
 
         # Create specialized agents
 
@@ -342,13 +345,13 @@ def create_supervisor(
             '''Search the web for information.'''
             return 'Here are the headcounts for each of the FAANG companies in 2024...'
 
-        math_agent = create_react_agent(
+        math_agent = create_agent(
             model="openai:gpt-4o",
             tools=[add],
             name="math_expert",
         )
 
-        research_agent = create_react_agent(
+        research_agent = create_agent(
             model="openai:gpt-4o",
             tools=[web_search],
             name="research_expert",
@@ -392,7 +395,7 @@ def create_supervisor(
     for agent in agents:
         if agent.name is None or agent.name == "LangGraph":
             raise ValueError(
-                "Please specify a name when you create your agent, either via `create_react_agent(..., name=agent_name)` "
+                "Please specify a name when you create your agent, either via `create_agent(..., name=agent_name)` "
                 "or via `graph.compile(name=name)`."
             )
 
@@ -411,27 +414,26 @@ def create_supervisor(
     )
     all_tools = list(tool_node.tools_by_name.values())
 
-    if _should_bind_tools(model, all_tools):
-        if _supports_disable_parallel_tool_calls(model):
-            model = cast(BaseChatModel, model).bind_tools(
-                all_tools, parallel_tool_calls=parallel_tool_calls
-            )
-        else:
-            model = cast(BaseChatModel, model).bind_tools(all_tools)
+    # Create base model first
+    base_model = model
 
-    if include_agent_name:
-        model = with_agent_name(model, include_agent_name)
-
-    supervisor_agent = create_react_agent(
+    # Add agent name after creating the agent if needed
+    supervisor_agent = create_agent(
         name=supervisor_name,
-        model=model,
-        tools=tool_node,
+        model=base_model,
+        tools=all_tools,  # Pass tools directly instead of ToolNode
         prompt=prompt,
         state_schema=supervisor_schema,
         response_format=response_format,
         pre_model_hook=pre_model_hook,
         post_model_hook=post_model_hook,
     )
+
+    # Add agent name processing if needed
+    if include_agent_name:
+        supervisor_agent = supervisor_agent.with_config(
+            {"model": with_agent_name(base_model, include_agent_name)}
+        )
 
     builder = StateGraph(workflow_schema, context_schema=context_schema)
     builder.add_node(supervisor_agent, destinations=tuple(agent_names) + (END,))

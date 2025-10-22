@@ -4,7 +4,7 @@ from typing import TypeGuard, cast
 
 from langchain_core.messages import AIMessage, ToolCall, ToolMessage
 from langchain_core.tools import BaseTool, InjectedToolCallId, tool
-from langgraph.prebuilt import InjectedState
+from langchain.agents.tool_node import InjectedState
 from langgraph.types import Command, Send
 from typing_extensions import Annotated
 
