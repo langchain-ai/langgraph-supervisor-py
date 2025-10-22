@@ -42,8 +42,8 @@ def add_inline_agent_name(message: BaseMessage) -> BaseMessage:
 
     formatted_message = message.model_copy()
     if _is_content_blocks_content(message.content):
-        text_blocks = [block for block in message.content if block["type"] == "text"]
-        non_text_blocks = [block for block in message.content if block["type"] != "text"]
+        text_blocks = [block for block in message.content if block["type"] == "text"]  # type: ignore[invalid-argument-type]
+        non_text_blocks = [block for block in message.content if block["type"] != "text"]  # type: ignore[invalid-argument-type]
         content = text_blocks[0]["text"] if text_blocks else ""
         formatted_content = f"<name>{message.name}</name><content>{content}</content>"
         formatted_message_content = [{"type": "text", "text": formatted_content}] + non_text_blocks
@@ -70,11 +70,11 @@ def remove_inline_agent_name(message: BaseMessage) -> BaseMessage:
         return message
 
     if is_content_blocks_content := _is_content_blocks_content(message.content):
-        text_blocks = [block for block in message.content if block["type"] == "text"]
+        text_blocks = [block for block in message.content if block["type"] == "text"]  # type: ignore[invalid-argument-type]
         if not text_blocks:
             return message
 
-        non_text_blocks = [block for block in message.content if block["type"] != "text"]
+        non_text_blocks = [block for block in message.content if block["type"] != "text"]  # type: ignore[invalid-argument-type]
         content = text_blocks[0]["text"]
     else:
         content = message.content
