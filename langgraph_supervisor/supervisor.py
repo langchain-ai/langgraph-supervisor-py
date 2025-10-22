@@ -1,11 +1,22 @@
 import inspect
-from typing import Any, Callable, Literal, Optional, Sequence, Type, Union, cast, get_args
+from typing import (
+    Any,
+    Awaitable,
+    Callable,
+    Literal,
+    Optional,
+    Sequence,
+    Type,
+    Union,
+    cast,
+    get_args,
+)
 from uuid import UUID, uuid5
 from warnings import warn
 
 from langchain_core.language_models import BaseChatModel, LanguageModelLike
 from langchain_core.messages import AnyMessage, ToolMessage
-from langchain_core.runnables import RunnableConfig
+from langchain_core.runnables import Runnable, RunnableConfig
 from langchain_core.tools import BaseTool
 from langgraph._internal._config import patch_configurable
 from langgraph._internal._runnable import RunnableCallable, RunnableLike
@@ -17,6 +28,7 @@ from langgraph.prebuilt.chat_agent_executor import (
     AgentState,
     AgentStateWithStructuredResponse,
     Prompt,
+    StateSchema,
     StateSchemaType,
     StructuredResponseSchema,
     _should_bind_tools,
@@ -24,6 +36,8 @@ from langgraph.prebuilt.chat_agent_executor import (
 )
 from langgraph.pregel import Pregel
 from langgraph.pregel.remote import RemoteGraph
+from langgraph.runtime import Runtime
+from langgraph.typing import ContextT
 from typing_extensions import Annotated, TypedDict, Unpack
 
 from langgraph_supervisor.agent_name import AgentNameMode, with_agent_name
@@ -208,10 +222,16 @@ class _OuterState(TypedDict):
     messages: Annotated[Sequence[AnyMessage], add_messages]
 
 
+DynamicModelLike = (
+    Callable[[StateSchema, Runtime[ContextT]], BaseChatModel]
+    | Callable[[StateSchema, Runtime[ContextT]], Awaitable[BaseChatModel]]
+)
+
+
 def create_supervisor(
     agents: list[Pregel],
     *,
-    model: LanguageModelLike,
+    model: str | LanguageModelLike | DynamicModelLike,
     tools: list[BaseTool | Callable] | ToolNode | None = None,
     prompt: Prompt | None = None,
     response_format: Optional[
@@ -237,8 +257,8 @@ def create_supervisor(
             An agent can be a LangGraph [CompiledStateGraph](https://langchain-ai.github.io/langgraph/reference/graphs/#langgraph.graph.state.CompiledStateGraph),
             a functional API [workflow](https://langchain-ai.github.io/langgraph/reference/func/#langgraph.func.entrypoint),
             or any other [Pregel](https://langchain-ai.github.io/langgraph/reference/pregel/#langgraph.pregel.Pregel) object.
-        model: Language model to use for the supervisor
-        tools: Tools to use for the supervisor
+        model: Language model to use for the supervisor. Supports static and dynamic model selection. For more information about dynamic model selection see [`create_react_agent`](https://langchain-ai.github.io/langgraph/reference/agents/#langgraph.prebuilt.chat_agent_executor.create_react_agent).
+        tools: Tools to use for the supervisor. Must be bound to the models for dynamic model selection.
         prompt: Optional prompt to use for the supervisor. Can be one of:
 
             - str: This is converted to a SystemMessage and added to the beginning of the list of messages in state["messages"].
@@ -324,6 +344,9 @@ def create_supervisor(
             - None: Relies on the LLM provider using the name attribute on the AI message. Currently, only OpenAI supports this.
             - `"inline"`: Add the agent name directly into the content field of the AI message using XML-style tags.
                 Example: `"How can I help you"` -> `"<name>agent_name</name><content>How can I help you?</content>"`
+
+            !!! Important
+                `include_agent_name` is not supported for dynamic model selection.
 
     Example:
         ```python
@@ -411,16 +434,32 @@ def create_supervisor(
     )
     all_tools = list(tool_node.tools_by_name.values())
 
-    if _should_bind_tools(model, all_tools):
-        if _supports_disable_parallel_tool_calls(model):
-            model = cast(BaseChatModel, model).bind_tools(
-                all_tools, parallel_tool_calls=parallel_tool_calls
-            )
-        else:
-            model = cast(BaseChatModel, model).bind_tools(all_tools)
+    is_dynamic_model = not isinstance(model, (str, Runnable)) and callable(model)
 
-    if include_agent_name:
-        model = with_agent_name(model, include_agent_name)
+    if not is_dynamic_model:
+        if isinstance(model, str):
+            try:
+                from langchain.chat_models import (  # type: ignore[import-not-found]
+                    init_chat_model,
+                )
+            except ImportError:
+                raise ImportError(
+                    "Please install langchain (`pip install langchain`) to "
+                    "use '<provider>:<model>' string syntax for `model` parameter."
+                ) from None
+
+            model = cast(BaseChatModel, init_chat_model(model))
+
+        if _should_bind_tools(model, all_tools):  # type: ignore[arg-type]
+            if _supports_disable_parallel_tool_calls(model):  # type: ignore[arg-type]
+                model = cast(BaseChatModel, model).bind_tools(
+                    all_tools, parallel_tool_calls=parallel_tool_calls
+                )
+            else:
+                model = cast(BaseChatModel, model).bind_tools(all_tools)
+
+        if include_agent_name:
+            model = with_agent_name(model, include_agent_name)  # type: ignore[arg-type]
 
     supervisor_agent = create_react_agent(
         name=supervisor_name,
