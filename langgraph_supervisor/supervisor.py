@@ -431,6 +431,7 @@ def create_supervisor(
         response_format=response_format,
         pre_model_hook=pre_model_hook,
         post_model_hook=post_model_hook,
+        version="v1" if parallel_tool_calls else "v2",
     )
 
     builder = StateGraph(workflow_schema, context_schema=context_schema)
