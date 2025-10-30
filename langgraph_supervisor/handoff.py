@@ -73,7 +73,7 @@ def create_handoff_tool(
         description: Optional description for the handoff tool.
             If not provided, the description will be `Ask agent <agent_name> for help`.
         add_handoff_messages: Whether to add handoff messages to the message history.
-            If False, the handoff messages will be omitted from the message history.
+            If `False`, the handoff messages will be omitted from the message history.
     """
     if name is None:
         name = f"transfer_to_{_normalize_agent_name(agent_name)}"
