@@ -18,6 +18,13 @@ dependencies = [
     "langchain-core>=1.0.0,<2.0.0"
 ]
 
+[project.urls]
+Source = "https://github.com/langchain-ai/langgraph-supervisor-py"
+Changelog = "https://github.com/langchain-ai/langgraph-supervisor-py/releases"
+Twitter = "https://x.com/LangChainAI"
+Slack = "https://www.langchain.com/join-community"
+Reddit = "https://www.reddit.com/r/LangChain/"
+
 [dependency-groups]
 test = [
     "pytest>=8.0.0",
