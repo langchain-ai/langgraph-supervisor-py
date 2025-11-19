@@ -251,20 +251,6 @@ wheels = [
 ]
 
 [[package]]
-name = "langchain"
-version = "1.0.8"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "langchain-core" },
-    { name = "langgraph" },
-    { name = "pydantic" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/62/07/4702bd5fc8a791e0cacf42379bd45115d24537ed0ce29e2c459fc841a4dd/langchain-1.0.8.tar.gz", hash = "sha256:d02f5a58a13eec9f24e4d6dbb8c0a9721582172a8f908061b31d3d10debf946f", size = 465201, upload-time = "2025-11-19T14:14:50.576Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/c1/e9/d9e23971c9d9286f78b58c298ab6a2bc10181040cb3c84aacb5091f0201d/langchain-1.0.8-py3-none-any.whl", hash = "sha256:4925bb402b83f49f652beee15c627bcd72a5a551452a0f6154869207564940d5", size = 93738, upload-time = "2025-11-19T14:14:49.663Z" },
-]
-
-[[package]]
 name = "langchain-core"
 version = "1.0.6"
 source = { registry = "https://pypi.org/simple" }
@@ -343,7 +329,6 @@ name = "langgraph-supervisor"
 version = "0.0.30"
 source = { editable = "." }
 dependencies = [
-    { name = "langchain" },
     { name = "langchain-core" },
     { name = "langgraph" },
 ]
@@ -359,7 +344,6 @@ test = [
 
 [package.metadata]
 requires-dist = [
-    { name = "langchain", specifier = ">=1.0.8,<2.0.0" },
     { name = "langchain-core", specifier = ">=1.0.0,<2.0.0" },
     { name = "langgraph", specifier = ">=1.0.2,<2.0.0" },
 ]
