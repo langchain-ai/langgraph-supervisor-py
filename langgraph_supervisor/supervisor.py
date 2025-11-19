@@ -14,13 +14,13 @@ from langgraph.graph import END, START, StateGraph
 from langgraph.graph.message import add_messages
 from langgraph.prebuilt import ToolNode
 from langgraph.prebuilt.chat_agent_executor import (
-    AgentState,
-    AgentStateWithStructuredResponse,
+    AgentState,  # type: ignore[deprecated]
+    AgentStateWithStructuredResponse,  # type: ignore[deprecated]
     Prompt,
     StateSchemaType,
     StructuredResponseSchema,
     _should_bind_tools,
-    create_react_agent,
+    create_react_agent,  # type: ignore[deprecated]
 )
 from langgraph.pregel import Pregel
 from langgraph.pregel.remote import RemoteGraph
@@ -390,7 +390,7 @@ def create_supervisor(
         add_handoff_back_messages = add_handoff_messages
 
     supervisor_schema = state_schema or (
-        AgentStateWithStructuredResponse if response_format is not None else AgentState
+        AgentStateWithStructuredResponse if response_format is not None else AgentState  # type: ignore[deprecated]
     )
     workflow_schema = state_schema or _OuterState
 
@@ -428,12 +428,12 @@ def create_supervisor(
     if include_agent_name:
         model = with_agent_name(model, include_agent_name)
 
-    supervisor_agent = create_react_agent(
+    supervisor_agent = create_react_agent(  # type: ignore[deprecated]
         name=supervisor_name,
         model=model,
         tools=tool_node,
         prompt=prompt,
-        state_schema=supervisor_schema,
+        state_schema=supervisor_schema,  # type: ignore[invalid-argument-type]
         response_format=response_format,
         pre_model_hook=pre_model_hook,
         post_model_hook=post_model_hook,
