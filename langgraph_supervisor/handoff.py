@@ -162,7 +162,7 @@ def create_forward_message_tool(supervisor_name: str = "supervisor") -> BaseTool
         supervisor_name: The name of the supervisor node (used for namespacing the tool).
 
     Returns:
-        BaseTool: The 'forward_message' tool.
+        BaseTool: The `'forward_message'` tool.
     """
     tool_name = "forward_message"
     desc = (
