@@ -68,7 +68,7 @@ def _make_call_agent(
     output_mode: OutputMode,
     add_handoff_back_messages: bool,
     supervisor_name: str,
-) -> Callable[[dict], dict] | RunnableCallable:
+) -> RunnableCallable:
     if output_mode not in get_args(OutputMode):
         raise ValueError(
             f"Invalid agent output mode: {output_mode}. Needs to be one of {get_args(OutputMode)}"
@@ -451,7 +451,7 @@ def create_supervisor(
         post_model_hook=post_model_hook,
     )
 
-    builder = StateGraph(workflow_schema, context_schema=context_schema)
+    builder = StateGraph(cast(Type[Any], workflow_schema), context_schema=context_schema)
     builder.add_node(supervisor_agent, destinations=tuple(agent_names) + (END,))
     builder.add_edge(START, supervisor_agent.name)
     for agent in agents:
