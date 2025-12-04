@@ -234,12 +234,15 @@ def create_supervisor(
 
     Args:
         agents: List of agents to manage.
-            An agent can be a LangGraph [`CompiledStateGraph`](https://reference.langchain.com/python/langgraph/graphs/#langgraph.graph.state.CompiledStateGraph),
-            a functional API workflow, or any other [Pregel](https://reference.langchain.com/python/langgraph/pregel/#langgraph.pregel.Pregel)
+
+            An agent can be a LangGraph [`CompiledStateGraph`][langgraph.graph.state.CompiledStateGraph],
+            a functional API workflow, or any other [Pregel][langgraph.pregel.Pregel]
             object.
         model: Language model to use for the supervisor
         tools: Tools to use for the supervisor
-        prompt: Optional prompt to use for the supervisor. Can be one of:
+        prompt: Optional prompt to use for the supervisor.
+
+            Can be one of:
 
             - `str`: This is converted to a `SystemMessage` and added to the beginning of the list of messages in `state["messages"]`.
             - `SystemMessage`: this is added to the beginning of the list of messages in `state["messages"]`.
@@ -253,34 +256,38 @@ def create_supervisor(
 
             Can be passed in as:
 
-                - An OpenAI function/tool schema,
-                - A JSON Schema,
-                - A TypedDict class,
-                - A Pydantic class.
-                - A tuple `(prompt, schema)`, where schema is one of the above.
-                    The prompt will be used together with the model that is being used to generate the structured response.
+            - An OpenAI function/tool schema,
+            - A JSON Schema,
+            - A TypedDict class,
+            - A Pydantic class.
+            - A tuple `(prompt, schema)`, where schema is one of the above.
+                The prompt will be used together with the model that is being used to generate the structured response.
 
             !!! Important
                 `response_format` requires the model to support `.with_structured_output`
 
             !!! Note
                 `response_format` requires `structured_response` key in your state schema.
+
                 You can use the prebuilt `langgraph.prebuilt.chat_agent_executor.AgentStateWithStructuredResponse`.
         pre_model_hook: An optional node to add before the LLM node in the supervisor agent (i.e., the node that calls the LLM).
+
             Useful for managing long message histories (e.g., message trimming, summarization, etc.).
+
             Pre-model hook must be a callable or a runnable that takes in current graph state and returns a state update in the form of
-                ```python
-                # At least one of `messages` or `llm_input_messages` MUST be provided
-                {
-                    # If provided, will UPDATE the `messages` in the state
-                    "messages": [RemoveMessage(id=REMOVE_ALL_MESSAGES), ...],
-                    # If provided, will be used as the input to the LLM,
-                    # and will NOT UPDATE `messages` in the state
-                    "llm_input_messages": [...],
-                    # Any other state keys that need to be propagated
-                    ...
-                }
-                ```
+
+            ```python
+            # At least one of `messages` or `llm_input_messages` MUST be provided
+            {
+                # If provided, will UPDATE the `messages` in the state
+                "messages": [RemoveMessage(id=REMOVE_ALL_MESSAGES), ...],
+                # If provided, will be used as the input to the LLM,
+                # and will NOT UPDATE `messages` in the state
+                "llm_input_messages": [...],
+                # Any other state keys that need to be propagated
+                ...
+            }
+            ```
 
             !!! Important
                 At least one of `messages` or `llm_input_messages` MUST be provided and will be used as an input to the `agent` node.
@@ -296,9 +303,12 @@ def create_supervisor(
                 }
                 ```
         post_model_hook: An optional node to add after the LLM node in the supervisor agent (i.e., the node that calls the LLM).
+
             Useful for implementing human-in-the-loop, guardrails, validation, or other post-processing.
+
             Post-model hook must be a callable or a runnable that takes in current graph state and returns a state update.
         parallel_tool_calls: Whether to allow the supervisor LLM to call tools in parallel (only OpenAI and Anthropic).
+
             Use this to control whether the supervisor can hand off to multiple agents at once.
 
             If `True`, will enable parallel tool calls.
@@ -311,6 +321,7 @@ def create_supervisor(
         state_schema: State schema to use for the supervisor graph.
         context_schema: Specifies the schema for the context object that will be passed to the workflow.
         output_mode: Mode for adding managed agents' outputs to the message history in the multi-agent workflow.
+
             Can be one of:
 
             - `full_history`: Add the entire agent message history
@@ -329,6 +340,7 @@ def create_supervisor(
 
             - `None`: Relies on the LLM provider using the name attribute on the AI message. Currently, only OpenAI supports this.
             - `'inline'`: Add the agent name directly into the content field of the AI message using XML-style tags.
+
                 Example: `"How can I help you"` -> `"<name>agent_name</name><content>How can I help you?</content>"`
 
     Example:
