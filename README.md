@@ -9,6 +9,7 @@ A Python library for creating hierarchical multi-agent systems using [LangGraph]
 - 🤖 **Create a supervisor agent** to orchestrate multiple specialized agents
 - 🛠️ **Tool-based agent handoff mechanism** for communication between agents
 - 📝 **Flexible message history management** for conversation control
+- 🎛️ **Context engineering & propogation** for controlling information flow between agents
 
 This library is built on top of [LangGraph](https://github.com/langchain-ai/langgraph), a powerful framework for building agent applications, and comes with out-of-box support for [streaming](https://langchain-ai.github.io/langgraph/how-tos/#streaming), [short-term and long-term memory](https://langchain-ai.github.io/langgraph/concepts/memory/) and [human-in-the-loop](https://langchain-ai.github.io/langgraph/concepts/human_in_the_loop/)
 
@@ -99,7 +100,7 @@ result = app.invoke({
 })
 ```
 
-## Message History Management
+## Basic Message Management
 
 You can control how messages from worker agents are added to the overall conversation history of the multi-agent system:
 
@@ -177,9 +178,21 @@ app = workflow.compile(
 )
 ```
 
-## How to customize
+## Context Engineering & Advanced Message Management
 
-### Customizing handoff tools
+A variety of powerful **context engineering** techniques are enabled through LangGraph Supervisor, allowing you to precisely control what information flows between agents. This is crucial for managing token costs, maintaining conversation relevance, and ensuring agents receive only the context they need to perform their tasks effectively.
+
+### Why Use Custom Tools vs Direct Agent Calls?
+
+You might wonder why not just call agents directly instead of using handoff tools. There are several important reasons:
+
+1. **Human-in-the-Loop Support**: The supervisor architecture supports interrupts and human oversight at the orchestration level
+2. **Consistent State Management**: Handoff tools ensure proper state updates and message history tracking
+3. **Audit Trail**: Tool calls create a clear record of which agent was called and why
+4. **Dynamic Routing**: The supervisor can choose between multiple agents based on context
+5. **Error Handling**: Failed tool calls can be handled gracefully by the supervisor
+
+### Basic Handoff Tool Customization
 
 By default, the supervisor uses handoff tools created with the prebuilt `create_handoff_tool`. You can also create your own, custom handoff tools. Here are some ideas on how you can modify the default implementation:
 
@@ -221,6 +234,164 @@ workflow = create_supervisor(
 )
 # This will create tools named: delegate_to_research_expert, delegate_to_math_expert
 ```
+
+### Advanced Context Control Patterns
+
+For sophisticated context management, you can create custom handoff tools. Here are some useful examples:
+
+#### 1. Summary-Based Context
+
+Create a handoff tool that provides only a summary instead of full history:
+
+```python
+from typing import Annotated
+from langchain_core.tools import tool, InjectedToolCallId
+from langchain_core.messages import ToolMessage, HumanMessage
+from langgraph.prebuilt import InjectedState
+from langgraph.types import Command, Send
+
+@tool("transfer_to_subject_expert_with_summary")
+def transfer_with_summary(
+    task_summary: Annotated[str, "Brief summary of what the subject expert should do"],
+    state: Annotated[dict, InjectedState],
+    tool_call_id: Annotated[str, InjectedToolCallId],
+) -> Command:
+    """Transfer to subject expert with only a task summary, not full history."""
+    
+    tool_message = ToolMessage(
+        content=f"Successfully transferred to subject expert with summary",
+        name="transfer_to_subject_expert_with_summary", 
+        tool_call_id=tool_call_id,
+    )
+    
+    # Create minimal context with just the summary
+    summary_message = HumanMessage(content=task_summary)
+    minimal_context = [summary_message]
+    
+    return Command(
+        goto=[Send("subject_expert", {"messages": minimal_context})],
+        graph=Command.PARENT,
+        update={"messages": state["messages"] + [tool_message]},
+    )
+
+# Use in supervisor
+workflow = create_supervisor(
+    [math_agent],
+    model=model,
+    tools=[transfer_with_summary],  # Custom tool instead of default
+    prompt="You are a supervisor. When delegating to subject expert, provide a clear task summary."
+)
+```
+
+#### 2. Recent Context Window
+
+Limit context to the most recent N messages:
+
+```python
+@tool("transfer_to_subject_expert_recent")
+def transfer_with_recent_context(
+    recent_message_count: Annotated[int, "Number of recent messages to include (default: 3)"] = 3,
+    state: Annotated[dict, InjectedState],
+    tool_call_id: Annotated[str, InjectedToolCallId],
+) -> Command:
+    """Transfer with only recent message history."""
+    
+    # Get the most recent messages
+    recent_messages = state["messages"][-recent_message_count:]
+    
+    return Command(
+        goto=[Send("subject_expert", {"messages": recent_messages})],
+        graph=Command.PARENT,
+        update={"messages": state["messages"] + [
+            ToolMessage(
+                content=f"Transferred with last {len(recent_messages)} messages",
+                name="transfer_to_subject_expert_recent",
+                tool_call_id=tool_call_id,
+            )
+        ]},
+    )
+```
+
+#### 3. Context Compression with pre_model_hook
+
+For more sophisticated context management, you could use the `pre_model_hook` parameter to implement context compression at the sub-agent level:
+
+```python
+from langchain_core.messages import RemoveMessage, SystemMessage
+
+def compress_context_hook(state):
+    """Hook to compress long message histories before sending to LLM."""
+    messages = state["messages"]
+    
+    # If history is too long, keep system message + recent messages + summary
+    if len(messages) > n:
+        system_msg = next((m for m in messages if m.type == "system"), None)
+        recent_messages = messages[-n:]  # Keep last n messages
+        
+        # Create a summary of the middle messages
+        middle_messages = messages[1:-n] if system_msg else messages[:-n]
+        summary_content = f"Previous conversation summary: {len(middle_messages)} messages discussed various topics."
+        summary_msg = SystemMessage(content=summary_content)
+        
+        compressed_messages = []
+        if system_msg:
+            compressed_messages.append(system_msg)
+        compressed_messages.extend([summary_msg] + recent_messages)
+        
+        return {
+            "messages": [RemoveMessage(id="REMOVE_ALL_MESSAGES")] + compressed_messages
+        }
+    
+    return {"messages": messages}
+
+# Apply to an agent
+math_agent = create_react_agent(
+    model=model,
+    tools=[add, multiply],
+    name="subject_expert",
+    pre_model_hook=compress_context_hook,  # Compress context before each LLM call
+    prompt="You are a subject-matter expert. Work with the provided context efficiently."
+)
+```
+
+#### 4. Role-Based Context Filtering
+
+Filter messages based on agent roles or message types:
+
+```python
+@tool("transfer_to_specialist_filtered")
+def transfer_with_filtered_context(
+    include_user_messages: Annotated[bool, "Include user messages"] = True,
+    include_agent_messages: Annotated[bool, "Include other agent messages"] = False,
+    state: Annotated[dict, InjectedState],
+    tool_call_id: Annotated[str, InjectedToolCallId],
+) -> Command:
+    """Transfer with filtered message types."""
+    
+    filtered_messages = []
+    for msg in state["messages"]:
+        if msg.type == "human" and include_user_messages:
+            filtered_messages.append(msg)
+        elif msg.type == "ai" and include_agent_messages:
+            filtered_messages.append(msg)
+        # Always include system messages
+        elif msg.type == "system":
+            filtered_messages.append(msg)
+    
+    return Command(
+        goto=[Send("specialist_agent", {"messages": filtered_messages})],
+        graph=Command.PARENT,
+        update={"messages": state["messages"] + [
+            ToolMessage(
+                content=f"Transferred with {len(filtered_messages)} filtered messages",
+                name="transfer_to_specialist_filtered",
+                tool_call_id=tool_call_id,
+            )
+        ]},
+    )
+```
+
+### Custom Handoff Tool Implementation
 
 Here is an example of what a custom handoff tool might look like:
 
@@ -288,7 +459,47 @@ workflow = create_supervisor(
 
 This creates a tool named `forward_message` that the supervisor can invoke. The tool expects an argument `from_agent` specifying which agent's last message should be forwarded directly to the output.
 
+## Controlling Context Shared Back Up
+
+You can also control how much information flows back from child agents to the supervisor. This is useful for keeping the supervisor's context clean and focused.
+
+### Output Mode Configuration
+
+Use the `output_mode` parameter to control what gets added back to the supervisor's message history:
+
+```python
+# Include only the final response from each agent
+workflow = create_supervisor(
+    [research_agent, math_agent],
+    model=model,
+    output_mode="last_message"  # Default - only final response
+)
+
+# Include the full conversation history from each agent
+workflow = create_supervisor(
+    [research_agent, math_agent], 
+    model=model,
+    output_mode="full_history"  # Complete agent interaction history
+)
+```
+
+### Handoff Back Messages
+
+Control whether handoff operations themselves are included in the message history:
+
+```python
+# Disable handoff messages to keep history cleaner
+workflow = create_supervisor(
+    [research_agent, math_agent],
+    model=model,
+    add_handoff_messages=False,  # Don't include "Transferred to X" messages
+    add_handoff_back_messages=False  # Don't include "Returned from X" messages
+)
+```
+
 ## Using Functional API 
+
+LangGraph's [Functional API](https://langchain-ai.github.io/langgraph/concepts/low_level/#functional-api) provides a decorator-based approach for building agents using simple Python functions instead of explicit graph construction. This is particularly useful for creating lightweight, task-specific agents that can be easily integrated into supervisor workflows.
 
 Here's a simple example of a supervisor managing two specialized agentic workflows created using Functional API:
 
