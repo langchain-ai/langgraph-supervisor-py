@@ -99,6 +99,9 @@ result = app.invoke({
 })
 ```
 
+> [!TIP]
+> For developing, debugging, and deploying AI agents and LLM applications, see [LangSmith](https://docs.langchain.com/langsmith/home).
+
 ## Message History Management
 
 You can control how messages from worker agents are added to the overall conversation history of the multi-agent system:
