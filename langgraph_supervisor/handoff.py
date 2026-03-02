@@ -176,22 +176,27 @@ def create_forward_message_tool(supervisor_name: str = "supervisor") -> BaseTool
         from_agent: str,
         state: Annotated[dict, InjectedState],
     ) -> str | Command:
+        normalized_agent = from_agent.strip()
+        if not normalized_agent:
+            return "Source agent name cannot be empty."
+        normalized_agent_key = normalized_agent.casefold()
         target_message = next(
             (
                 m
                 for m in reversed(state["messages"])
                 if isinstance(m, AIMessage)
-                and (m.name or "").lower() == from_agent.lower()
-                and not m.response_metadata.get(METADATA_KEY_IS_HANDOFF_BACK)
+                and (m.name or "").casefold() == normalized_agent_key
+                and not (m.response_metadata or {}).get(METADATA_KEY_IS_HANDOFF_BACK)
             ),
             None,
         )
         if not target_message:
-            found_names = set(
-                m.name for m in state["messages"] if isinstance(m, AIMessage) and m.name
+            found_names = sorted(
+                {m.name for m in state["messages"] if isinstance(m, AIMessage) and m.name}
             )
             return (
-                f"Could not find message from source agent {from_agent}. Found names: {found_names}"
+                "Could not find message from source agent "
+                f"{normalized_agent}. Found names: {found_names}"
             )
         updates = [
             AIMessage(

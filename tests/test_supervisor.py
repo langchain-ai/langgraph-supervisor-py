@@ -462,7 +462,7 @@ def test_supervisor_message_forwarding() -> None:
             tool_calls=[
                 {
                     "name": "forward_message",
-                    "args": {"from_agent": "echo_agent"},
+                    "args": {"from_agent": "  Echo_Agent  "},
                     "id": "abcd123",
                     "type": "tool_call",
                 }
