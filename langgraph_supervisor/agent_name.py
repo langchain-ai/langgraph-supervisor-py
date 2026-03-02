@@ -121,7 +121,7 @@ def with_agent_name(
         model: Language model to add agent name formatting to.
         agent_name_mode: Use to specify how to expose the agent name to the LLM.
             - "inline": Add the agent name directly into the content field of the AI message using XML-style tags.
-                Example: "How can I help you" -> "<name>agent_name</name><content>How can I help you?</content>".
+                Example: `"How can I help you"` -> `"<name>agent_name</name><content>How can I help you?</content>"`.
     """
     if agent_name_mode == "inline":
         process_input_message = add_inline_agent_name
