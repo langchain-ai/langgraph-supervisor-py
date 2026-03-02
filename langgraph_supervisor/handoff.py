@@ -35,8 +35,8 @@ def _remove_non_handoff_tool_calls(
         content = [
             content_block
             for content_block in content
-            if (content_block["type"] == "tool_use" and content_block["id"] == handoff_tool_call_id)  # type: ignore[invalid-argument-type]
-            or content_block["type"] != "tool_use"  # type: ignore[invalid-argument-type]
+            if (content_block["type"] == "tool_use" and content_block["id"] == handoff_tool_call_id)
+            or content_block["type"] != "tool_use"
         ]
 
     last_ai_message = AIMessage(

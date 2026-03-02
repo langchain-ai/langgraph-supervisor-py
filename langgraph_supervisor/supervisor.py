@@ -445,7 +445,7 @@ def create_supervisor(
         model=model,
         tools=tool_node,
         prompt=prompt,
-        state_schema=supervisor_schema,  # type: ignore[invalid-argument-type]
+        state_schema=supervisor_schema,
         response_format=response_format,
         pre_model_hook=pre_model_hook,
         post_model_hook=post_model_hook,
