@@ -7,6 +7,7 @@ from langchain_core.tools import BaseTool, InjectedToolCallId, tool
 from langgraph.prebuilt import InjectedState
 from langgraph.types import Command, Send
 from typing_extensions import Annotated
+from langchain_core.messages import HumanMessage
 
 WHITESPACE_RE = re.compile(r"\s+")
 METADATA_KEY_HANDOFF_DESTINATION = "__handoff_destination"
@@ -85,46 +86,32 @@ def create_handoff_tool(
     if description is None:
         description = f"Ask agent '{agent_name}' for help"
 
-    @tool(name, description=description)
+    @tool(name,description=description)
     def handoff_to_agent(
+        query:Annotated[str,f'specific query to pass to {name} agent'],
         state: Annotated[dict, InjectedState],
         tool_call_id: Annotated[str, InjectedToolCallId],
-    ) -> Command:
+    )->Command:
+        _message=HumanMessage(content=query)
+
         tool_message = ToolMessage(
-            content=f"Successfully transferred to {agent_name}",
+            content=f"succesfully transferd to{agent_name}",
             name=name,
             tool_call_id=tool_call_id,
             response_metadata={METADATA_KEY_HANDOFF_DESTINATION: agent_name},
         )
-        last_ai_message = cast(AIMessage, state["messages"][-1])
-        # Handle parallel handoffs
-        if len(last_ai_message.tool_calls) > 1:
-            handoff_messages = state["messages"][:-1]
-            if add_handoff_messages:
-                handoff_messages.extend(
-                    (
-                        _remove_non_handoff_tool_calls(last_ai_message, tool_call_id),
-                        tool_message,
-                    )
-                )
-            return Command(
-                graph=Command.PARENT,
-                # NOTE: we are using Send here to allow the ToolNode in langgraph.prebuilt
-                # to handle parallel handoffs by combining all Send commands into a single command
-                goto=[Send(agent_name, {**state, "messages": handoff_messages})],
-            )
-        # Handle single handoff
+
+        if add_handoff_messages:
+            update_message=state["messages"] + [tool_message]        
         else:
-            if add_handoff_messages:
-                handoff_messages = state["messages"] + [tool_message]
-            else:
-                handoff_messages = state["messages"][:-1]
-            return Command(
-                goto=agent_name,
-                graph=Command.PARENT,
-                update={**state, "messages": handoff_messages},
+            update_message = state["messages"][:-1]
+        return Command(
+            graph=Command.PARENT,
+            update={**state, "messages": update_message},
+            goto=Send(agent_name, {"messages": [_message]}),
             )
 
+        
     handoff_to_agent.metadata = {METADATA_KEY_HANDOFF_DESTINATION: agent_name}
     return handoff_to_agent
 

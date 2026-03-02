@@ -4,7 +4,7 @@ from uuid import UUID, uuid5
 from warnings import warn
 
 from langchain_core.language_models import BaseChatModel, LanguageModelLike
-from langchain_core.messages import AnyMessage, ToolMessage
+from langchain_core.messages import AnyMessage, ToolMessage,HumanMessage
 from langchain_core.runnables import RunnableConfig
 from langchain_core.tools import BaseTool
 from langgraph._internal._config import patch_configurable

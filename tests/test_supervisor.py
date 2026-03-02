@@ -14,6 +14,7 @@ from langchain_core.tools import BaseTool, tool
 from langgraph.graph import MessagesState, StateGraph
 from langgraph.prebuilt import create_react_agent
 
+
 from langgraph_supervisor import create_supervisor
 from langgraph_supervisor.agent_name import AgentNameMode, with_agent_name
 from langgraph_supervisor.handoff import create_forward_message_tool
@@ -56,7 +57,7 @@ supervisor_messages = [
         tool_calls=[
             {
                 "name": "transfer_to_research_expert",
-                "args": {},
+                "args": {"query": "FAANG headcount 2024"},
                 "id": "call_gyQSgJQm5jJtPcF5ITe8GGGF",
                 "type": "tool_call",
             }
@@ -67,7 +68,7 @@ supervisor_messages = [
         tool_calls=[
             {
                 "name": "transfer_to_math_expert",
-                "args": {},
+                "args": {"query": "combined headcount of the FAANG companies"},
                 "id": "call_zCExWE54g4B4oFZcwBh3Wumg",
                 "type": "tool_call",
             }
@@ -272,18 +273,18 @@ def test_supervisor_basic_workflow(
         }
     )
 
-    assert len(result_full_history["messages"]) == 23
+    assert len(result_full_history["messages"]) == 25
     # first supervisor handoff
     assert result_full_history["messages"][1] == supervisor_messages[0]
     # all research agent AI messages
-    assert result_full_history["messages"][3] == research_agent_messages[0]
-    assert result_full_history["messages"][5] == research_agent_messages[1]
+    assert result_full_history["messages"][4] == research_agent_messages[0]
+    assert result_full_history["messages"][6] == research_agent_messages[1]
     # next supervisor handoff
-    assert result_full_history["messages"][8] == supervisor_messages[1]
+    assert result_full_history["messages"][9] == supervisor_messages[1]
     # all math agent AI messages
-    assert result_full_history["messages"][10] == math_agent_messages[0]
-    assert result_full_history["messages"][14] == math_agent_messages[1]
-    assert result_full_history["messages"][17] == math_agent_messages[2]
+    assert result_full_history["messages"][12] == math_agent_messages[0]
+    assert result_full_history["messages"][16] == math_agent_messages[1]
+    assert result_full_history["messages"][19] == math_agent_messages[2]
     # final supervisor message
     assert result_full_history["messages"][-1] == supervisor_messages[-1]
 
@@ -451,7 +452,7 @@ def test_supervisor_message_forwarding() -> None:
             tool_calls=[
                 {
                     "name": "transfer_to_echo_agent",
-                    "args": {},
+                    "args": {"query":"echo.."},
                     "id": "call_gyQSgJQm5jJtPcF5ITe8GGGF",
                     "type": "tool_call",
                 }
@@ -513,14 +514,14 @@ def test_supervisor_message_forwarding() -> None:
             "tool_calls": [
                 {
                     "name": "transfer_to_echo_agent",
-                    "args": {},
+                    "args": {"query":"echo.."},
                 }
             ],
             "type": "ai",
         },
         {
             "name": "transfer_to_echo_agent",
-            "content": "Successfully transferred to echo_agent",
+            "content": "succesfully transferd toecho_agent",
             "tool_calls": None,
             "type": "tool",
         },
