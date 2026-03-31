@@ -20,6 +20,9 @@ env:
 
   UV_FROZEN: "true"
 
+permissions:
+  contents: read
+
 jobs:
   build:
     name: "make lint #${{ inputs.python-version }}"
