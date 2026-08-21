@@ -102,6 +102,88 @@ result = app.invoke({
 > [!TIP]
 > For developing, debugging, and deploying AI agents and LLM applications, see [LangSmith](https://docs.langchain.com/langsmith/home).
 
+## Using OrcaRouter as the model provider
+
+You can use [OrcaRouter](https://www.orcarouter.ai) as the model provider for your supervisor workflow. OrcaRouter is an OpenAI-compatible gateway that routes requests to a wide range of models through a single endpoint, so you can swap models without changing your application code. It also runs gateway-level, zero-trust security for AI agents on the same endpoint — screening every prompt/response and governing every tool call on a default-deny basis, with no application code changes.
+
+```bash
+pip install langgraph-supervisor langchain-openai
+
+export ORCAROUTER_API_KEY=<your_api_key>
+```
+
+Point `ChatOpenAI` at OrcaRouter's endpoint and use the `orcarouter/auto` alias, which automatically routes each request to the best available model:
+
+```python
+import os
+
+from langchain_openai import ChatOpenAI
+
+from langgraph_supervisor import create_supervisor
+from langgraph.prebuilt import create_react_agent
+
+model = ChatOpenAI(
+    base_url="https://api.orcarouter.ai/v1",
+    model="orcarouter/auto",
+    api_key=os.environ["ORCAROUTER_API_KEY"],
+)
+
+def add(a: float, b: float) -> float:
+    """Add two numbers."""
+    return a + b
+
+def multiply(a: float, b: float) -> float:
+    """Multiply two numbers."""
+    return a * b
+
+def web_search(query: str) -> str:
+    """Search the web for information."""
+    return (
+        "Here are the headcounts for each of the FAANG companies in 2024:\n"
+        "1. **Facebook (Meta)**: 67,317 employees.\n"
+        "2. **Apple**: 164,000 employees.\n"
+        "3. **Amazon**: 1,551,000 employees.\n"
+        "4. **Netflix**: 14,000 employees.\n"
+        "5. **Google (Alphabet)**: 181,269 employees."
+    )
+
+math_agent = create_react_agent(
+    model=model,
+    tools=[add, multiply],
+    name="math_expert",
+    prompt="You are a math expert. Always use one tool at a time."
+)
+
+research_agent = create_react_agent(
+    model=model,
+    tools=[web_search],
+    name="research_expert",
+    prompt="You are a world class researcher with access to web search. Do not do any math."
+)
+
+workflow = create_supervisor(
+    [research_agent, math_agent],
+    model=model,
+    prompt=(
+        "You are a team supervisor managing a research expert and a math expert. "
+        "For current events, use research_agent. "
+        "For math problems, use math_agent."
+    )
+)
+
+app = workflow.compile()
+result = app.invoke({
+    "messages": [
+        {
+            "role": "user",
+            "content": "what's the combined headcount of the FAANG companies in 2024?"
+        }
+    ]
+})
+```
+
+You can also override the endpoint and model with the `ORCAROUTER_BASE_URL` and `ORCAROUTER_MODEL` environment variables.
+
 ## Message History Management
 
 You can control how messages from worker agents are added to the overall conversation history of the multi-agent system:
